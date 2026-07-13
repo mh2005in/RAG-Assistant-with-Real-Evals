@@ -1,4 +1,4 @@
-# RAG Assistant with Real Evals
+# RAG Assistant with Real Evals - In Progress
 
 A Retrieval-Augmented Generation (RAG) assistant built with a rigorous, evaluation-driven approach. This project explores the full RAG pipeline — from document ingestion through chunking, embedding, and retrieval — and measures each stage with real evaluations rather than vibes.
 
