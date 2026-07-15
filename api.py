@@ -45,7 +45,13 @@ async def process(
             raise HTTPException(status_code=422, detail=exc.errors()) from exc
 
     content = await file.read()
-    return ProcessResponse(processed=process_file(content, strategy, fixed_request))
+    return process_file(
+        content,
+        strategy,
+        fixed_request,
+        filename=file.filename,
+        content_type=file.content_type,
+    )
 
 
 if __name__ == "__main__":

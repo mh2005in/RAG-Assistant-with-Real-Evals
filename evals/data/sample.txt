@@ -1,0 +1,26 @@
+Retrieval-augmented generation grounds a language model in an external
+knowledge base so that answers can cite real source material instead of relying
+solely on parametric memory. A typical pipeline ingests documents, splits them
+into retrievable chunks, embeds each chunk into a vector, and stores those
+vectors for similarity search at query time.
+
+Chunking sits at the center of that pipeline. The way a document is divided
+determines what the retriever can find and how much irrelevant context it drags
+along. Chunks that are too large dilute the signal and waste the context window;
+chunks that are too small fracture ideas across boundaries and lose the
+surrounding meaning a reader needs to make sense of a passage.
+
+Fixed-size chunking is the simplest strategy. It ignores sentence, paragraph,
+and section boundaries entirely and slices the text stream into windows of a set
+length. Its virtue is predictability: every chunk except the last has exactly the
+same size, throughput is trivial to reason about, and there are no surprises in
+how the document is partitioned. Its weakness is that it cuts through the middle
+of sentences and ideas, which can strand an important clause at the edge of a
+chunk where the retriever is less likely to surface it intact.
+
+Because it is so simple, fixed-size chunking makes an honest baseline. Structure
+aware strategies, recursive splitters, and semantic or model-driven approaches
+all promise better boundaries, but that promise only means something when it is
+measured against a reference. This evaluation records the concrete behavior of
+the fixed-size strategy across several window sizes so later strategies have real
+numbers to beat rather than intuitions to argue with.

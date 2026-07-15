@@ -6,6 +6,7 @@ readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
     "fastapi>=0.115.0",
+    "pymupdf>=1.28.0",
     "python-multipart>=0.0.9",
     "uvicorn>=0.32.0",
 ]
@@ -17,3 +18,16 @@ dev = [
     "pytest>=9.1.1",
     "ruff>=0.15.21",
 ]
+
+[tool.mypy]
+python_version = "3.13"
+warn_unused_ignores = true
+
+[[tool.mypy.overrides]]
+# PyMuPDF does not ship type information.
+module = ["pymupdf", "pymupdf.*"]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
