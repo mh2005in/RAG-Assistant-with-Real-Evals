@@ -4,45 +4,48 @@ Run with:
     uv run uvicorn api:app --host 127.0.0.1 --port 9080
 """
 
-from enum import Enum
+from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from pydantic import ValidationError
 
-from fastapi import FastAPI, File, Form, UploadFile
-from pydantic import BaseModel
+from dtos.requests import ChunkingStrategy, FixedSizeChunkingRequest
+from dtos.responses import ProcessResponse
+from services.file_processing import process_file
 
 app = FastAPI(title="RAG Assistant — File Processing")
-
-
-class ChunkingStrategy(str, Enum):
-    """Chunking strategies under evaluation (see README)."""
-
-    fixed = "fixed"
-    semantic = "semantic"
-    structural = "structural"
-    recursive = "recursive"
-    llm = "llm"
-
-
-class ProcessResponse(BaseModel):
-    processed: bool
-
-
-def process_file(content: bytes, strategy: ChunkingStrategy) -> bool:
-    """Process an uploaded file with the given chunking strategy.
-
-    Returns True when processing succeeds. Currently this validates that the
-    file has content; real chunking logic is wired in as the pipeline matures.
-    """
-    return len(content) > 0
 
 
 @app.post("/process", response_model=ProcessResponse)
 async def process(
     file: UploadFile = File(...),
     strategy: ChunkingStrategy = Form(...),
+    fixed_size: str | None = Form(
+        None,
+        description=(
+            "JSON body of FixedSizeChunkingRequest "
+            '(e.g. {"chunk_size": 512, "exclude_pages": [1, {"start": 10, "end": 12}]}). '
+            "Required when strategy is 'fixed'."
+        ),
+    ),
 ) -> ProcessResponse:
-    """Accept a file and chunking strategy; return whether it was processed."""
+    """Accept a file and chunking strategy; return whether it was processed.
+
+    When ``strategy`` is ``fixed``, ``fixed_size`` must contain the JSON body
+    of a :class:`FixedSizeChunkingRequest`.
+    """
+    fixed_request: FixedSizeChunkingRequest | None = None
+    if strategy is ChunkingStrategy.fixed:
+        if fixed_size is None:
+            raise HTTPException(
+                status_code=422,
+                detail="fixed_size is required when strategy is 'fixed'.",
+            )
+        try:
+            fixed_request = FixedSizeChunkingRequest.model_validate_json(fixed_size)
+        except ValidationError as exc:
+            raise HTTPException(status_code=422, detail=exc.errors()) from exc
+
     content = await file.read()
-    return ProcessResponse(processed=process_file(content, strategy))
+    return ProcessResponse(processed=process_file(content, strategy, fixed_request))
 
 
 if __name__ == "__main__":
