@@ -42,17 +42,19 @@ Early development — architecture and tooling are still being finalized.
 - Keep unit tests fast and offline — mock external services (LLM APIs, Firecrawl, the database). Tests that need Postgres/pgvector or network belong behind a marker (e.g. `@pytest.mark.integration`) so the default run stays fast.
 - Don't delete or weaken a failing test to make the suite pass — fix the underlying issue or ask.
 
-## Secrets & data handling
+## Secrets, PII & data handling
 
 - **Replace secrets with placeholders before committing.** Real API keys (Firecrawl, LLM providers) and DB credentials must be swapped for placeholder values (e.g. `YOUR_API_KEY_HERE`) in any file being committed — never commit a live secret.
   - Before every commit, scan the staged diff for real credentials and confirm they've been placeholdered.
   - If a real secret is ever committed, treat it as compromised: rotate the key, don't just amend the commit.
+- **Replace PII with placeholders before committing.** Never commit data identifying a real person — names, emails, phone numbers, addresses, IDs, or the contents of a real user's documents — in code, tests, fixtures, eval datasets, logs, comments, or commit messages. Swap it for obvious fakes (`Jane Doe`, `user@example.com`, `+1-555-0100`) and prefer generating synthetic fixtures over redacting real ones — a redaction you missed is indistinguishable from data you meant to keep.
+  - Before every commit, scan the staged diff for PII as well as credentials. **gitleaks matches secret patterns, not PII — it will not catch a real name or email for you.**
+  - If real PII is ever committed, treat it as a disclosure, not a typo: purge it from history and tell whoever owns the data. Amending the next commit leaves it in the history.
 - **A pre-commit secret scanner (gitleaks) runs automatically** ([.githooks/pre-commit](.githooks/pre-commit) runs `gitleaks git --staged`). It blocks commits whose staged changes contain likely secrets.
   - Requires gitleaks to be installed. Windows: `winget install gitleaks` (or `scoop install gitleaks` / `choco install gitleaks`); macOS: `brew install gitleaks`. See https://github.com/gitleaks/gitleaks#installing.
   - Enable the hook in a fresh clone: `git config core.hooksPath .githooks` (config is per-clone, so each checkout must run this once).
   - It's a safety net, not a substitute for the placeholder rule above. Bypass a genuine false positive with `git commit --no-verify`.
 - **Never commit source documents, scraped content, embeddings, or database dumps.** These are data artifacts — keep them out of git (add to `.gitignore`) and out of the repo.
-- Don't paste real credentials, customer data, or scraped PII into code, tests, logs, or commit messages.
 - PostgreSQL + pgvector connection details come from config/env, never hardcoded.
 
 ## Git
