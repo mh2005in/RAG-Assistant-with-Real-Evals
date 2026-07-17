@@ -9,9 +9,11 @@ from pydantic import ValidationError
 
 from dtos.requests import ChunkingStrategy, FixedSizeChunkingRequest
 from dtos.responses import ProcessResponse
-from services.file_processing import process_file
+from services.file_processing import FileProcessing
 
 app = FastAPI(title="RAG Assistant — File Processing")
+
+file_processing = FileProcessing()
 
 
 @app.post("/process", response_model=ProcessResponse)
@@ -45,7 +47,7 @@ async def process(
             raise HTTPException(status_code=422, detail=exc.errors()) from exc
 
     content = await file.read()
-    return process_file(
+    return file_processing.process(
         content,
         strategy,
         fixed_request,

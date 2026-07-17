@@ -28,7 +28,7 @@ _RESULTS_PATH = Path(__file__).parent / "results" / "fixed_size_chunking.json"
 _CHUNK_SIZES = [256, 512, 1024]
 
 
-def load_pages(path: Path = _DATA_PATH) -> list[str]:
+def _load_pages(path: Path = _DATA_PATH) -> list[str]:
     """Load the sample document as per-page text (form feed splits pages)."""
     text = path.read_text(encoding="utf-8")
     return text.split("\f")
@@ -62,9 +62,9 @@ def chunk_metrics(chunks: list[str], chunk_size: int) -> dict[str, Any]:
     }
 
 
-def run() -> dict[str, Any]:
+def _run() -> dict[str, Any]:
     """Run the fixed-size sweep and return the results payload."""
-    pages = load_pages()
+    pages = _load_pages()
     results = []
     for size in _CHUNK_SIZES:
         request = FixedSizeChunkingRequest(chunk_size=size)
@@ -97,7 +97,7 @@ def _print_table(payload: dict[str, Any]) -> None:
 
 
 def main() -> None:
-    payload = run()
+    payload = _run()
     _RESULTS_PATH.parent.mkdir(parents=True, exist_ok=True)
     _RESULTS_PATH.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
     _print_table(payload)
