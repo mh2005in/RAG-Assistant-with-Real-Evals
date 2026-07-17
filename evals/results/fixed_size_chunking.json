@@ -1,0 +1,40 @@
+{
+  "strategy": "fixed",
+  "dataset": "sample.txt",
+  "document_chars": 1723,
+  "runs": [
+    {
+      "chunk_size": 256,
+      "num_chunks": 7,
+      "total_chars": 1723,
+      "min_chunk_chars": 187,
+      "max_chunk_chars": 256,
+      "mean_chunk_chars": 246.14,
+      "stdev_chunk_chars": 26.08,
+      "fill_ratio": 0.9615,
+      "undersized_chunks": 1
+    },
+    {
+      "chunk_size": 512,
+      "num_chunks": 4,
+      "total_chars": 1723,
+      "min_chunk_chars": 187,
+      "max_chunk_chars": 512,
+      "mean_chunk_chars": 430.75,
+      "stdev_chunk_chars": 162.5,
+      "fill_ratio": 0.8413,
+      "undersized_chunks": 1
+    },
+    {
+      "chunk_size": 1024,
+      "num_chunks": 2,
+      "total_chars": 1723,
+      "min_chunk_chars": 699,
+      "max_chunk_chars": 1024,
+      "mean_chunk_chars": 861.5,
+      "stdev_chunk_chars": 229.81,
+      "fill_ratio": 0.8413,
+      "undersized_chunks": 1
+    }
+  ]
+}

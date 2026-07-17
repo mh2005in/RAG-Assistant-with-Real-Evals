@@ -1,3 +1,3 @@
-from dtos.responses.process import ProcessResponse
+from dtos.responses.process import DocType, ProcessResponse
 
-__all__ = ["ProcessResponse"]
+__all__ = ["DocType", "ProcessResponse"]
