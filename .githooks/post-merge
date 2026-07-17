@@ -1,0 +1,91 @@
+#!/bin/sh
+# Worktree cleanup — drops worktrees under .claude/worktrees/ whose branch has
+# landed on main, per the worktree rule in the repo guidance.
+#
+# Enable in a fresh clone with:  git config core.hooksPath .githooks
+#
+# When it runs:
+#   After `git merge` / `git pull` on main. A PR merged on GitHub reaches you
+#   here the next time you pull main — hooks are local, so nothing fires at the
+#   moment the PR merges. It does NOT run on `git pull --rebase` (no merge).
+#
+# What it will not do:
+#   - Remove anything with uncommitted changes: `git worktree remove` is called
+#     without --force, so git itself refuses and the worktree is kept.
+#   - Delete an unmerged branch: `git branch -d` refuses those.
+#   - Touch directories git does not track as worktrees: those are only
+#     reported, never deleted.
+#
+# Note: this detects merged branches by ancestry, which is how merge commits
+# work. If this repo ever switches to squash merges, branch commits never
+# become ancestors of main and nothing here will be cleaned up automatically.
+
+set -u
+
+say() {
+    echo "worktree cleanup: $1"
+}
+
+# Only clean up once merged work has actually landed on main.
+branch=$(git symbolic-ref --quiet --short HEAD 2>/dev/null || true)
+[ "${branch:-}" = "main" ] || exit 0
+
+root=$(git rev-parse --show-toplevel)
+wt_root="$root/.claude/worktrees"
+[ -d "$wt_root" ] || exit 0
+
+registered=$(mktemp) || exit 0
+trap 'rm -f "$registered"' EXIT
+
+# One "<path>\t<branch>" line per registered worktree (branch empty if detached).
+git worktree list --porcelain | awk '
+    /^worktree /  { path = substr($0, 10); br = "" }
+    /^branch /    { br = substr($0, 8); sub(/^refs\/heads\//, "", br) }
+    /^detached$/  { br = "" }
+    /^$/          { if (path != "") print path "\t" br; path = "" }
+    END           { if (path != "") print path "\t" br }
+' >"$registered"
+
+tab=$(printf '\t')
+
+# --- registered worktrees whose branch is merged into main ---
+while IFS="$tab" read -r path br; do
+    # Only ever consider worktrees living under .claude/worktrees/.
+    case "$path" in
+        "$wt_root"/*) ;;
+        *) continue ;;
+    esac
+    [ "$path" = "$root" ] && continue
+
+    name=$(basename "$path")
+
+    if [ -z "$br" ]; then
+        say "kept $name (detached HEAD — no branch to check)"
+        continue
+    fi
+
+    # Unmerged work stays put.
+    git merge-base --is-ancestor "refs/heads/$br" HEAD 2>/dev/null || continue
+
+    if git worktree remove "$path" 2>/dev/null; then
+        say "removed $name ($br merged)"
+        if git branch -d "$br" >/dev/null 2>&1; then
+            say "pruned branch $br"
+        fi
+    else
+        say "kept $name (uncommitted changes — remove it yourself when ready)"
+    fi
+done <"$registered"
+
+# --- leftover directories git does not know about ---
+for dir in "$wt_root"/*/; do
+    [ -d "$dir" ] || continue
+    path=${dir%/}
+    if ! cut -f1 "$registered" | grep -Fxq "$path"; then
+        say "$(basename "$path") is not a registered worktree — delete it by hand if it is leftover"
+    fi
+done
+
+git worktree prune
+
+exit 0

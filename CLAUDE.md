@@ -70,3 +70,8 @@ Early development — architecture and tooling are still being finalized.
 - Feature work happens in git worktrees under `.claude/worktrees/<name>/`.
 - **On a successful PR merge to `main`, delete that PR's worktree directory.** Once the merge is confirmed (e.g. `gh pr view <n> --json state,mergedAt` shows it merged), run `git worktree remove .claude/worktrees/<name>` from the main checkout to remove it cleanly (add `--force` only if the tree has intended leftover files). Then prune the merged branch with `git branch -d <branch>`.
 - Only remove a worktree after the merge is verified — never delete one with unmerged or uncommitted work. Don't delete the `main` checkout or the shared root `CLAUDE.md`.
+- **A post-merge cleanup hook automates the above** ([.githooks/post-merge](.githooks/post-merge)). After a `git merge`/`git pull` on `main` it removes each worktree under `.claude/worktrees/` whose branch has landed, and prunes that branch.
+  - It runs when you **pull merged work into `main`**, not when the PR merges — hooks are local, so nothing fires on GitHub's side. It does **not** run on `git pull --rebase` (no merge happens).
+  - Enable the hook in a fresh clone: `git config core.hooksPath .githooks` (same per-clone config as the pre-commit hook).
+  - It calls `git worktree remove` and `git branch -d` without `--force`, so git refuses anything dirty or unmerged and the hook reports it instead. Directories git doesn't track as worktrees are reported, never deleted — clean those up by hand.
+  - It detects merged branches by ancestry. If this repo ever switches to squash merges, branch commits never become ancestors of `main` and the hook will stop cleaning up.
