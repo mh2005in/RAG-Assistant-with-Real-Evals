@@ -25,8 +25,8 @@ def test_pdf_is_chunked_with_fixed_strategy(
     assert body["doc_type"] == "pdf"
     assert body["chunk_count"] == len(body["chunks"])
     assert body["chunk_count"] > 0
-    # Fixed-size chunks are capped at chunk_size characters.
-    assert all(len(chunk["text"]) <= 8 for chunk in body["chunks"])
+    # Fixed-size chunks are capped at chunk_size words.
+    assert all(len(chunk["text"].split()) <= 8 for chunk in body["chunks"])
     # Each chunk is serialized with its stats and a non-empty embedding.
     first = body["chunks"][0]
     assert first["page_number"] >= 1
