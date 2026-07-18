@@ -18,9 +18,10 @@ class ProcessResponse(BaseModel):
     """Result of processing an uploaded file.
 
     ``chunks`` is populated only when the document could be chunked (currently
-    PDFs processed with the fixed-size strategy); each carries its text,
-    per-page stats, and an embedding vector. Otherwise it is empty and
-    ``chunk_count`` is 0.
+    PDFs processed with the fixed-size strategy); each carries its per-page
+    stats plus a clipped preview of its text and embedding (see
+    :meth:`Chunk.truncated`) to keep the response small. Otherwise it is empty
+    and ``chunk_count`` is 0.
     """
 
     processed: bool

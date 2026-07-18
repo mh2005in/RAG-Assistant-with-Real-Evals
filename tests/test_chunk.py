@@ -31,3 +31,30 @@ def test_from_page_whitespace_only_counts_no_words_or_sentences() -> None:
 
     assert chunk.page_word_count == 0
     assert chunk.page_sentence_count_raw == 0
+
+
+def test_truncated_clips_text_and_embedding_but_keeps_stats() -> None:
+    text = "abcdefghij"
+    chunk = Chunk.from_page(2, text)
+    chunk.embedding = [float(i) for i in range(10)]
+
+    preview = chunk.truncated(text_chars=4, embedding_dims=3)
+
+    # Bulky payloads are clipped.
+    assert preview.text == "abcd"
+    assert preview.embedding == [0.0, 1.0, 2.0]
+    # Stats still describe the full page and vector; the original is untouched.
+    assert preview.page_number == 2
+    assert preview.page_char_count == len(text)
+    assert chunk.text == text
+    assert chunk.embedding == [float(i) for i in range(10)]
+
+
+def test_truncated_leaves_short_text_and_embedding_unchanged() -> None:
+    chunk = Chunk.from_page(1, "short")
+    chunk.embedding = [1.0, 2.0]
+
+    preview = chunk.truncated(text_chars=200, embedding_dims=8)
+
+    assert preview.text == "short"
+    assert preview.embedding == [1.0, 2.0]

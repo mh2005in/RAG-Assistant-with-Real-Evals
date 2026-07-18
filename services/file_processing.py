@@ -85,7 +85,8 @@ class FileProcessing:
         when ``strategy`` is :attr:`ChunkingStrategy.fixed`.
 
         Currently only PDFs chunked with the fixed-size strategy produce chunks;
-        each chunk carries its per-page stats and an embedding vector. Other
+        each response chunk carries its per-page stats plus a clipped preview of
+        its text and embedding (the full payloads are only used internally). Other
         document types and strategies are detected/accepted but return no chunks
         yet (they are wired in as the pipeline matures).
         """
@@ -105,11 +106,13 @@ class FileProcessing:
             chunks = [Chunk.from_page(page_number, text) for page_number, text in paged]
             if chunks:
                 chunks = self._get_embedder().embed_chunks(chunks)
+            # Clip the bulky text/embedding payloads so the response stays small;
+            # the per-page stats still describe the full page and vector.
             return ProcessResponse(
                 processed=True,
                 doc_type=doc_type,
                 chunk_count=len(chunks),
-                chunks=chunks,
+                chunks=[chunk.truncated() for chunk in chunks],
             )
 
         return ProcessResponse(processed=len(content) > 0, doc_type=doc_type)
