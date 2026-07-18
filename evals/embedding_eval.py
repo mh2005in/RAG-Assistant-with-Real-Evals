@@ -31,8 +31,8 @@ from services.embedding import SentenceTransformerEmbedder
 _DATA_PATH = Path(__file__).parent / "data" / "sample.txt"
 _RESULTS_PATH = Path(__file__).parent / "results" / "embedding.json"
 
-# Chunk window (characters) used to slice the sample into texts to embed.
-_CHUNK_SIZE = 256
+# Chunk window (words) used to slice the sample into texts to embed.
+_CHUNK_SIZE = 64
 
 # Models compared. all-mpnet-base-v2 is the configured default; the MiniLM model
 # is a smaller, faster alternative included to show model_name is configurable.

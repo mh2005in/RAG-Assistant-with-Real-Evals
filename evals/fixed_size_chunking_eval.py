@@ -24,8 +24,8 @@ from services.chunking import FixedSizeChunker
 _DATA_PATH = Path(__file__).parent / "data" / "sample.txt"
 _RESULTS_PATH = Path(__file__).parent / "results" / "fixed_size_chunking.json"
 
-# Window sizes (characters) compared in this baseline sweep.
-_CHUNK_SIZES = [256, 512, 1024]
+# Window sizes (words) compared in this baseline sweep.
+_CHUNK_SIZES = [64, 128, 256]
 
 
 def _load_pages(path: Path = _DATA_PATH) -> list[str]:
@@ -37,25 +37,26 @@ def _load_pages(path: Path = _DATA_PATH) -> list[str]:
 def chunk_metrics(chunks: list[str], chunk_size: int) -> dict[str, Any]:
     """Summary metrics for a set of chunks produced at ``chunk_size``.
 
+    Sizes are measured in words (whitespace-split), matching the chunking unit.
     Strategy-agnostic: any chunker's output can be scored with this so future
     strategies are measured on the same axes.
     """
-    lengths = [len(chunk) for chunk in chunks]
-    total_chars = sum(lengths)
+    lengths = [len(chunk.split()) for chunk in chunks]
+    total_words = sum(lengths)
     return {
         "chunk_size": chunk_size,
         "num_chunks": len(chunks),
-        "total_chars": total_chars,
-        "min_chunk_chars": min(lengths, default=0),
-        "max_chunk_chars": max(lengths, default=0),
-        "mean_chunk_chars": round(statistics.fmean(lengths), 2) if lengths else 0.0,
-        "stdev_chunk_chars": (
+        "total_words": total_words,
+        "min_chunk_words": min(lengths, default=0),
+        "max_chunk_words": max(lengths, default=0),
+        "mean_chunk_words": round(statistics.fmean(lengths), 2) if lengths else 0.0,
+        "stdev_chunk_words": (
             round(statistics.stdev(lengths), 2) if len(lengths) > 1 else 0.0
         ),
         # Average fraction of a window that is actually filled. Fixed-size fills
         # every chunk but the last, so this trends toward 1.0 as the doc grows.
         "fill_ratio": (
-            round(total_chars / (len(chunks) * chunk_size), 4) if chunks else 0.0
+            round(total_words / (len(chunks) * chunk_size), 4) if chunks else 0.0
         ),
         # Chunks shorter than the target window (only the tail, for fixed-size).
         "undersized_chunks": sum(1 for length in lengths if length < chunk_size),
@@ -73,7 +74,7 @@ def _run() -> dict[str, Any]:
     return {
         "strategy": "fixed",
         "dataset": _DATA_PATH.name,
-        "document_chars": sum(len(page) for page in pages),
+        "document_words": sum(len(page.split()) for page in pages),
         "runs": results,
     }
 
@@ -82,7 +83,7 @@ def _print_table(payload: dict[str, Any]) -> None:
     header = f"{'size':>6} {'chunks':>7} {'mean':>8} {'stdev':>8} {'fill':>7}"
     print(
         f"fixed-size chunking - {payload['dataset']} "
-        f"({payload['document_chars']} chars)"
+        f"({payload['document_words']} words)"
     )
     print(header)
     print("-" * len(header))
@@ -90,8 +91,8 @@ def _print_table(payload: dict[str, Any]) -> None:
         print(
             f"{run_result['chunk_size']:>6} "
             f"{run_result['num_chunks']:>7} "
-            f"{run_result['mean_chunk_chars']:>8} "
-            f"{run_result['stdev_chunk_chars']:>8} "
+            f"{run_result['mean_chunk_words']:>8} "
+            f"{run_result['stdev_chunk_words']:>8} "
             f"{run_result['fill_ratio']:>7}"
         )
 

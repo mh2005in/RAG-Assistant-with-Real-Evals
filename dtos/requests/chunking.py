@@ -47,7 +47,7 @@ class FixedSizeChunkingRequest(BaseModel):
     chunk_size: int = Field(
         ...,
         gt=0,
-        description="Number of units (e.g. characters/tokens) per chunk.",
+        description="Number of words per chunk (whitespace-split).",
     )
     exclude_pages: list[int | PageRange] = Field(
         default_factory=list,
