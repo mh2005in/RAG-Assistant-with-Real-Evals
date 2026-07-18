@@ -26,7 +26,12 @@ def test_pdf_is_chunked_with_fixed_strategy(
     assert body["chunk_count"] == len(body["chunks"])
     assert body["chunk_count"] > 0
     # Fixed-size chunks are capped at chunk_size characters.
-    assert all(len(chunk) <= 8 for chunk in body["chunks"])
+    assert all(len(chunk["text"]) <= 8 for chunk in body["chunks"])
+    # Each chunk is serialized with its stats and a non-empty embedding.
+    first = body["chunks"][0]
+    assert first["page_number"] >= 1
+    assert first["page_char_count"] == len(first["text"])
+    assert isinstance(first["embedding"], list) and first["embedding"]
 
 
 def test_excluded_pages_are_dropped(
@@ -43,7 +48,7 @@ def test_excluded_pages_are_dropped(
     )
 
     assert response.status_code == 200
-    joined = "".join(response.json()["chunks"])
+    joined = "".join(chunk["text"] for chunk in response.json()["chunks"])
     assert "KEEPME" in joined
     assert "DROPME" not in joined
 

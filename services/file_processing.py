@@ -12,8 +12,9 @@ apples-to-apples.
 import pymupdf
 
 from dtos.requests import ChunkingStrategy, FixedSizeChunkingRequest
-from dtos.responses import DocType, ProcessResponse
+from dtos.responses import Chunk, DocType, ProcessResponse
 from services.chunking import FixedSizeChunker
+from services.embedding import Embedder, SentenceTransformerEmbedder
 
 _PDF_MAGIC = b"%PDF-"
 # The %PDF- marker should sit at the very start, but some producers emit a few
@@ -22,7 +23,21 @@ _MAGIC_SEARCH_WINDOW = 1024
 
 
 class FileProcessing:
-    """Detect, extract and chunk uploaded files for the ``/process`` endpoint."""
+    """Detect, extract, chunk and embed uploaded files for ``/process``.
+
+    The embedder loads its model lazily on first use, so constructing the
+    service (and importing the app) stays cheap and offline until a document is
+    actually embedded. Pass an ``embedder`` to override the model/device or to
+    inject a fake in tests.
+    """
+
+    def __init__(self, embedder: Embedder | None = None) -> None:
+        self._embedder = embedder
+
+    def _get_embedder(self) -> Embedder:
+        if self._embedder is None:
+            self._embedder = SentenceTransformerEmbedder()
+        return self._embedder
 
     def _detect_doc_type(
         self,
@@ -70,8 +85,9 @@ class FileProcessing:
         when ``strategy`` is :attr:`ChunkingStrategy.fixed`.
 
         Currently only PDFs chunked with the fixed-size strategy produce chunks;
-        other document types and strategies are detected/accepted but return no
-        chunks yet (they are wired in as the pipeline matures).
+        each chunk carries its per-page stats and an embedding vector. Other
+        document types and strategies are detected/accepted but return no chunks
+        yet (they are wired in as the pipeline matures).
         """
         if strategy is ChunkingStrategy.fixed and fixed_size is None:
             raise ValueError(
@@ -85,7 +101,10 @@ class FileProcessing:
         if doc_type is DocType.pdf and strategy is ChunkingStrategy.fixed:
             assert fixed_size is not None  # guaranteed by the guard above
             pages = self._extract_pdf_pages(content)
-            chunks = FixedSizeChunker(fixed_size).chunk(pages)
+            paged = FixedSizeChunker(fixed_size).chunk_with_pages(pages)
+            chunks = [Chunk.from_page(page_number, text) for page_number, text in paged]
+            if chunks:
+                chunks = self._get_embedder().embed_chunks(chunks)
             return ProcessResponse(
                 processed=True,
                 doc_type=doc_type,

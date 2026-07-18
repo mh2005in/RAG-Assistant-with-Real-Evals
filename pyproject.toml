@@ -9,6 +9,7 @@ dependencies = [
     "pydantic>=2.13.4",
     "pymupdf>=1.28.0",
     "python-multipart>=0.0.9",
+    "sentence-transformers>=5.6.0",
     "uvicorn>=0.32.0",
 ]
 
@@ -27,6 +28,11 @@ warn_unused_ignores = true
 [[tool.mypy.overrides]]
 # PyMuPDF does not ship type information.
 module = ["pymupdf", "pymupdf.*"]
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+# sentence-transformers does not ship complete type information.
+module = ["sentence_transformers", "sentence_transformers.*"]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]

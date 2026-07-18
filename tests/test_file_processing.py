@@ -74,7 +74,10 @@ class TestProcess:
         assert response.doc_type is DocType.pdf
         assert response.chunk_count == len(response.chunks)
         assert response.chunk_count > 0
-        assert all(len(chunk) <= 8 for chunk in response.chunks)
+        assert all(len(chunk.text) <= 8 for chunk in response.chunks)
+        # Every chunk is embedded and tagged with a source page.
+        assert all(chunk.embedding for chunk in response.chunks)
+        assert all(chunk.page_number >= 1 for chunk in response.chunks)
 
     def test_non_pdf_is_detected_but_not_chunked(self) -> None:
         response = service.process(

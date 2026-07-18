@@ -34,7 +34,11 @@ Split extracted content into retrievable units. Strategies under evaluation:
 
 ### 4. Embedding
 
-Convert chunks into vector representations for similarity search. _(In progress.)_
+Convert chunks into vector representations for similarity search via
+**sentence-transformers**. The model (default `all-mpnet-base-v2`, 768-dim) and
+the compute device (default `cpu`) are configurable. See the comparative
+baseline in [`evals/results/embedding.json`](evals/results/embedding.json)
+(regenerate with `uv run python -m evals.embedding_eval`).
 
 ### 5. Storage
 
