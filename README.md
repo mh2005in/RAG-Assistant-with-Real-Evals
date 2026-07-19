@@ -34,11 +34,12 @@ Split extracted content into retrievable units. Strategies under evaluation:
 
 ### 4. Embedding
 
-Convert chunks into vector representations for similarity search via
-**sentence-transformers**. The model (default `all-mpnet-base-v2`, 768-dim) and
-the compute device (default `cpu`) are configurable. See the comparative
-baseline in [`evals/results/embedding.json`](evals/results/embedding.json)
-(regenerate with `uv run python -m evals.embedding_eval`).
+Convert chunks into vector representations for similarity search via a local
+**Ollama** embedding model (default `nomic-embed-text`, 768-dim, matching the
+`vector(768)` storage column). The server and model come from `$OLLAMA_BASE_URL`
+and `$OLLAMA_EMBED_MODEL`; the compose stack runs Ollama and pulls the model.
+Embedders sit behind the `Embedder` interface
+([`services/embedding/`](services/embedding/)) so backends stay swappable.
 
 ### 5. Storage
 
@@ -54,7 +55,7 @@ tables ([`db/schema.sql`](db/schema.sql)); `PostgresStorage`
 
 ```bash
 cp .env.example .env            # local-dev credentials (see .env.example)
-docker compose up -d            # Postgres + pgvector (applies db/schema.sql) and Ollama (pulls the model)
+docker compose up -d            # Postgres + pgvector (applies db/schema.sql) and Ollama (pulls the embedding + generation models)
 ```
 
 The default connection string is `postgresql://rag:rag@localhost:5435/rag`
