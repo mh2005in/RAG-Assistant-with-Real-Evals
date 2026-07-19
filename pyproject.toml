@@ -6,6 +6,8 @@ readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
     "fastapi>=0.115.0",
+    "pgvector>=0.5.0",
+    "psycopg[binary]>=3.3.4",
     "pydantic>=2.13.4",
     "pymupdf>=1.28.0",
     "python-multipart>=0.0.9",
@@ -38,3 +40,6 @@ ignore_missing_imports = true
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["."]
+markers = [
+    "integration: needs a live PostgreSQL/pgvector database (deselect with -m 'not integration')",
+]

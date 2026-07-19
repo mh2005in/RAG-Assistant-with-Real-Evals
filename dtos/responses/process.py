@@ -22,9 +22,14 @@ class ProcessResponse(BaseModel):
     stats plus a clipped preview of its text and embedding (see
     :meth:`Chunk.truncated`) to keep the response small. Otherwise it is empty
     and ``chunk_count`` is 0.
+
+    ``document_id`` is the primary key of the stored ``documents`` row when the
+    chunks were persisted, and ``None`` when nothing was stored (e.g. the file
+    produced no chunks, or no storage was configured).
     """
 
     processed: bool
     doc_type: DocType
     chunk_count: int = 0
     chunks: list[Chunk] = Field(default_factory=list)
+    document_id: int | None = None

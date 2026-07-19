@@ -15,6 +15,7 @@ from dtos.requests import ChunkingStrategy, FixedSizeChunkingRequest
 from dtos.responses import Chunk, DocType, ProcessResponse
 from services.chunking import FixedSizeChunker
 from services.embedding import Embedder, SentenceTransformerEmbedder
+from services.storage import PostgresStorage
 
 _PDF_MAGIC = b"%PDF-"
 # The %PDF- marker should sit at the very start, but some producers emit a few
@@ -75,14 +76,22 @@ class FileProcessing:
         self,
         content: bytes,
         strategy: ChunkingStrategy,
+        name: str,
+        access_role: str,
         fixed_size: FixedSizeChunkingRequest | None = None,
         filename: str | None = None,
         content_type: str | None = None,
+        storage: PostgresStorage | None = None,
     ) -> ProcessResponse:
-        """Detect the document type and, for PDFs, chunk it.
+        """Detect the document type, chunk it, and (if given) persist it.
 
         ``fixed_size`` carries the fixed-size chunking parameters and is required
         when ``strategy`` is :attr:`ChunkingStrategy.fixed`.
+
+        When chunks are produced and a ``storage`` is supplied, the document is
+        saved under ``name``/``access_role`` with its chunks, and the new
+        document id is returned on the response. The full (un-truncated) chunks
+        are persisted; only the response copies are clipped.
 
         Currently only PDFs chunked with the fixed-size strategy produce chunks;
         each response chunk carries its per-page stats plus a clipped preview of
@@ -104,8 +113,15 @@ class FileProcessing:
             pages = self._extract_pdf_pages(content)
             paged = FixedSizeChunker(fixed_size).chunk_with_pages(pages)
             chunks = [Chunk.from_page(page_number, text) for page_number, text in paged]
+            document_id: int | None = None
             if chunks:
                 chunks = self._get_embedder().embed_chunks(chunks)
+                # Persist the full chunks (full text + vector) before the response
+                # copies are clipped below.
+                if storage is not None:
+                    document_id = storage.insert_document(
+                        name, access_role, chunks
+                    ).document_id
             # Clip the bulky text/embedding payloads so the response stays small;
             # the per-page stats still describe the full page and vector.
             return ProcessResponse(
@@ -113,6 +129,7 @@ class FileProcessing:
                 doc_type=doc_type,
                 chunk_count=len(chunks),
                 chunks=[chunk.truncated() for chunk in chunks],
+                document_id=document_id,
             )
 
         return ProcessResponse(processed=len(content) > 0, doc_type=doc_type)
