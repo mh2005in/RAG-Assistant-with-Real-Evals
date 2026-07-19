@@ -52,6 +52,12 @@ Early development — architecture and tooling are still being finalized.
 - **Services talk to each other by compose service name over the internal network** (Postgres at `db:5432`, Ollama at `ollama:11434`), not `localhost` or the published host ports. The app's `DATABASE_URL` is built in compose from the `db` service config — don't hardcode it.
 - **After a change, verify the stack still builds and runs** (`docker compose up -d --build`, then exercise the affected endpoint) — not just the host-run tests.
 
+## Documentation
+
+- **Keep [README.md](README.md) current — update it in the same change, not as a follow-up.** After any change that affects how the app is understood, run, or used — a new/changed endpoint, an architecture or pipeline-stage change, a dependency or stack change, new configuration/env vars, or a change to the setup/usage steps — update the README as part of that change so it never drifts from the code.
+- The README describes **what exists today**. Keep aspirational/not-yet-built work under its "Roadmap" section, not presented as if it already works. When a roadmap item ships, move it out of Roadmap into the relevant section.
+- Pure internals with no user-facing or architectural effect (e.g. a small refactor or comment fix) don't need a README edit — but if in doubt, update it.
+
 ## Secrets, PII & data handling
 
 - **Replace secrets with placeholders before committing.** Real API keys (Firecrawl, LLM providers) and DB credentials must be swapped for placeholder values (e.g. `YOUR_API_KEY_HERE`) in any file being committed — never commit a live secret.
