@@ -1,21 +1,46 @@
-"""Endpoint tests for the /process route."""
+"""Endpoint tests for the /process route.
 
-from collections.abc import Callable
+The storage dependency is overridden with a fake so these tests never open a
+database connection (see CLAUDE.md); ``fake_storage`` records what would have
+been persisted.
+"""
 
+from collections.abc import Callable, Iterator
+from unittest.mock import MagicMock
+
+import pytest
 from fastapi.testclient import TestClient
 
-from api import app
+from api import app, get_storage
+from dtos.responses import StoredDocument
 
 client = TestClient(app)
 
 
-def test_pdf_is_chunked_with_fixed_strategy(
-    make_pdf: Callable[[list[str]], bytes],
+@pytest.fixture(autouse=True)
+def fake_storage() -> Iterator[MagicMock]:
+    """Override the storage dependency with a fake for every request."""
+    storage = MagicMock()
+    storage.insert_document.return_value = StoredDocument(
+        document_id=123, chunk_count=1
+    )
+    app.dependency_overrides[get_storage] = lambda: storage
+    yield storage
+    app.dependency_overrides.pop(get_storage, None)
+
+
+def test_pdf_is_chunked_and_stored_with_fixed_strategy(
+    make_pdf: Callable[[list[str]], bytes], fake_storage: MagicMock
 ) -> None:
     pdf = make_pdf(["Page one text.", "Page two text."])
     response = client.post(
         "/process",
-        data={"strategy": "fixed", "fixed_size": '{"chunk_size": 8}'},
+        data={
+            "strategy": "fixed",
+            "name": "report.pdf",
+            "access_role": "analyst",
+            "fixed_size": '{"chunk_size": 8}',
+        },
         files={"file": ("doc.pdf", pdf, "application/pdf")},
     )
 
@@ -32,6 +57,11 @@ def test_pdf_is_chunked_with_fixed_strategy(
     assert first["page_number"] >= 1
     assert first["page_char_count"] == len(first["text"])
     assert isinstance(first["embedding"], list) and first["embedding"]
+    # The document was persisted and its id returned.
+    assert body["document_id"] == 123
+    name, access_role, _ = fake_storage.insert_document.call_args.args
+    assert name == "report.pdf"
+    assert access_role == "analyst"
 
 
 def test_excluded_pages_are_dropped(
@@ -42,6 +72,8 @@ def test_excluded_pages_are_dropped(
         "/process",
         data={
             "strategy": "fixed",
+            "name": "report.pdf",
+            "access_role": "analyst",
             "fixed_size": '{"chunk_size": 1000, "exclude_pages": [2]}',
         },
         files={"file": ("doc.pdf", pdf, "application/pdf")},
@@ -53,10 +85,17 @@ def test_excluded_pages_are_dropped(
     assert "DROPME" not in joined
 
 
-def test_non_pdf_is_detected_but_not_chunked() -> None:
+def test_non_pdf_is_detected_but_not_chunked_or_stored(
+    fake_storage: MagicMock,
+) -> None:
     response = client.post(
         "/process",
-        data={"strategy": "fixed", "fixed_size": '{"chunk_size": 8}'},
+        data={
+            "strategy": "fixed",
+            "name": "notes.txt",
+            "access_role": "analyst",
+            "fixed_size": '{"chunk_size": 8}',
+        },
         files={"file": ("notes.txt", b"just some plain text", "text/plain")},
     )
 
@@ -65,6 +104,8 @@ def test_non_pdf_is_detected_but_not_chunked() -> None:
     assert body["doc_type"] == "unknown"
     assert body["chunks"] == []
     assert body["chunk_count"] == 0
+    assert body["document_id"] is None
+    fake_storage.insert_document.assert_not_called()
 
 
 def test_fixed_strategy_requires_fixed_size(
@@ -73,7 +114,20 @@ def test_fixed_strategy_requires_fixed_size(
     pdf = make_pdf(["anything"])
     response = client.post(
         "/process",
-        data={"strategy": "fixed"},
+        data={"strategy": "fixed", "name": "doc.pdf", "access_role": "analyst"},
+        files={"file": ("doc.pdf", pdf, "application/pdf")},
+    )
+
+    assert response.status_code == 422
+
+
+def test_name_and_access_role_are_required(
+    make_pdf: Callable[[list[str]], bytes],
+) -> None:
+    pdf = make_pdf(["anything"])
+    response = client.post(
+        "/process",
+        data={"strategy": "fixed", "fixed_size": '{"chunk_size": 8}'},
         files={"file": ("doc.pdf", pdf, "application/pdf")},
     )
 
