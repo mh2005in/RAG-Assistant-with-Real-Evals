@@ -42,6 +42,16 @@ Early development — architecture and tooling are still being finalized.
 - Keep unit tests fast and offline — mock external services (LLM APIs, Firecrawl, the database). Tests that need Postgres/pgvector or network belong behind a marker (e.g. `@pytest.mark.integration`) so the default run stays fast.
 - Don't delete or weaken a failing test to make the suite pass — fix the underlying issue or ask.
 
+## Local stack (Docker Compose)
+
+- **The app is packaged ([Dockerfile](Dockerfile)) and runs as a service in [docker-compose.yml](docker-compose.yml)** alongside its dependencies (Postgres/pgvector, Ollama). The whole stack comes up with `docker compose up -d --build` (app on `http://localhost:8000`). **Keep it this way** — the compose stack is how the app is run and tested end-to-end.
+- **When you add functionality, wire it into the stack in the same change** so it stays runnable and testable:
+  - New runtime env var → add it to the `app` service's `environment:` in docker-compose and document it in [.env.example](.env.example). Don't rely on it being set only on the host.
+  - New dependency (a service, model, etc.) → add it as a compose service and wire the `app` service's `depends_on`/env to reach it.
+  - New Python dependency → it's picked up by the image via `uv sync` on the next `--build`; no Dockerfile change needed.
+- **Services talk to each other by compose service name over the internal network** (Postgres at `db:5432`, Ollama at `ollama:11434`), not `localhost` or the published host ports. The app's `DATABASE_URL` is built in compose from the `db` service config — don't hardcode it.
+- **After a change, verify the stack still builds and runs** (`docker compose up -d --build`, then exercise the affected endpoint) — not just the host-run tests.
+
 ## Secrets, PII & data handling
 
 - **Replace secrets with placeholders before committing.** Real API keys (Firecrawl, LLM providers) and DB credentials must be swapped for placeholder values (e.g. `YOUR_API_KEY_HERE`) in any file being committed — never commit a live secret.
