@@ -55,9 +55,10 @@ services:
     #           count: all
     #           capabilities: [gpu]
 
-  # One-shot helper: waits for the server, pulls the model, then exits. `pull` is
-  # idempotent, so on later `up`s it just confirms the model is present. Override
-  # the model with $OLLAMA_MODEL (default gemma2:2b, a small ~2B model).
+  # One-shot helper: waits for the server, pulls the generation model and the
+  # embedding model, then exits. `pull` is idempotent, so on later `up`s it just
+  # confirms they are present. Override with $OLLAMA_MODEL (default gemma2:2b) and
+  # $OLLAMA_EMBED_MODEL (default nomic-embed-text, 768-dim).
   ollama-pull:
     image: ollama/ollama:latest
     depends_on:
@@ -65,7 +66,10 @@ services:
         condition: service_healthy
     environment:
       OLLAMA_HOST: http://ollama:11434
-    entrypoint: ["ollama", "pull", "${OLLAMA_MODEL:-gemma2:2b}"]
+    entrypoint:
+      - sh
+      - -c
+      - "ollama pull ${OLLAMA_MODEL:-gemma2:2b} && ollama pull ${OLLAMA_EMBED_MODEL:-nomic-embed-text}"
     restart: "no"
 
 volumes:

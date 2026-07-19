@@ -1,47 +1,41 @@
 """Shared pytest fixtures.
 
 Provides a small in-memory PDF builder so tests can exercise real PDF
-extraction without any files on disk or network access, and a fake
-sentence-transformers model so the embedding path runs offline (see CLAUDE.md).
+extraction without any files on disk or network access, and a fake Ollama client
+so the embedding path runs offline (see CLAUDE.md).
 """
 
 from collections.abc import Callable
+from types import SimpleNamespace
 from typing import Any
 
-import numpy as np
 import pymupdf
 import pytest
 
 
-class FakeSentenceTransformer:
-    """Stand-in for ``SentenceTransformer``: records init args, fakes encode.
+class FakeOllamaEmbedClient:
+    """Stand-in for ``ollama.Client`` used by ``OllamaEmbedder``.
 
-    Loads no weights and hits no network. ``encode`` returns a deterministic
-    2-d vector per text so ordering and pass-through are verifiable.
+    Loads nothing and hits no network. ``embed`` returns a deterministic 2-d
+    vector per input text (``[len(text), position]``) so ordering and
+    pass-through are verifiable.
     """
 
-    instances: list["FakeSentenceTransformer"] = []
+    def __init__(self, host: str | None = None, **kwargs: Any) -> None:
+        self.host = host
 
-    def __init__(self, model_name: str, device: str) -> None:
-        self.model_name = model_name
-        self.device = device
-        FakeSentenceTransformer.instances.append(self)
-
-    def encode(self, texts: list[str], convert_to_numpy: bool = True) -> Any:
-        return np.array([[float(len(text)), float(i)] for i, text in enumerate(texts)])
+    def embed(self, model: str, input: list[str]) -> Any:
+        texts = [input] if isinstance(input, str) else list(input)
+        embeddings = [[float(len(text)), float(i)] for i, text in enumerate(texts)]
+        return SimpleNamespace(embeddings=embeddings)
 
 
 @pytest.fixture(autouse=True)
-def fake_embedder_model(
-    monkeypatch: pytest.MonkeyPatch,
-) -> type[FakeSentenceTransformer]:
-    """Replace the real model with a fake everywhere, keeping tests offline."""
-    FakeSentenceTransformer.instances = []
+def fake_embedder(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Replace the embedder's Ollama client with a fake, keeping tests offline."""
     monkeypatch.setattr(
-        "services.embedding.sentence_transformer.SentenceTransformer",
-        FakeSentenceTransformer,
+        "services.embedding.ollama_embedder.Client", FakeOllamaEmbedClient
     )
-    return FakeSentenceTransformer
 
 
 @pytest.fixture

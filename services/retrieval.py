@@ -11,7 +11,7 @@ The vector search SQL itself lives on :class:`~services.storage.PostgresStorage`
 
 from dtos.requests import RetrievalRequest
 from dtos.responses import RetrievalResponse
-from services.embedding import Embedder, SentenceTransformerEmbedder
+from services.embedding import Embedder, OllamaEmbedder
 from services.storage import PostgresStorage
 
 
@@ -28,7 +28,7 @@ class Retrieval:
 
     def _get_embedder(self) -> Embedder:
         if self._embedder is None:
-            self._embedder = SentenceTransformerEmbedder()
+            self._embedder = OllamaEmbedder.from_env()
         return self._embedder
 
     def retrieve(

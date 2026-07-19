@@ -14,7 +14,7 @@ import pymupdf
 from dtos.requests import ChunkingStrategy, FixedSizeChunkingRequest
 from dtos.responses import Chunk, DocType, ProcessResponse
 from services.chunking import FixedSizeChunker
-from services.embedding import Embedder, SentenceTransformerEmbedder
+from services.embedding import Embedder, OllamaEmbedder
 from services.storage import PostgresStorage
 
 _PDF_MAGIC = b"%PDF-"
@@ -37,7 +37,7 @@ class FileProcessing:
 
     def _get_embedder(self) -> Embedder:
         if self._embedder is None:
-            self._embedder = SentenceTransformerEmbedder()
+            self._embedder = OllamaEmbedder.from_env()
         return self._embedder
 
     def _detect_doc_type(

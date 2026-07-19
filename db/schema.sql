@@ -25,9 +25,9 @@ CREATE TABLE documents (
 -- chunks were produced in so a document can be reconstructed / cited in order.
 --
 -- ``embedding`` is vector(768) to match the default embedding model
--- (all-mpnet-base-v2, 768-dim). pgvector columns are fixed-dimension, so this is
--- coupled to the model: a 384-dim model (e.g. all-MiniLM-L6-v2) would need a
--- different column or table.
+-- (Ollama's nomic-embed-text, 768-dim). pgvector columns are fixed-dimension, so
+-- this is coupled to the model: a different-dimension model (e.g. a 1024-dim
+-- model) would need a different column or table.
 CREATE TABLE chunks (
     id                      BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     document_id             BIGINT      NOT NULL
@@ -48,8 +48,8 @@ CREATE TABLE chunks (
 -- Fetch/delete a document's chunks by foreign key.
 CREATE INDEX chunks_document_id_idx ON chunks (document_id);
 
--- Approximate-nearest-neighbour index for similarity search. Cosine distance
--- matches how sentence-transformers embeddings are compared (see the embedding
--- eval's meancos metric). HNSW requires pgvector >= 0.5.0.
+-- Approximate-nearest-neighbour index for similarity search. Cosine distance is
+-- the usual metric for these embeddings and matches how retrieval ranks chunks.
+-- HNSW requires pgvector >= 0.5.0.
 CREATE INDEX chunks_embedding_hnsw_idx
     ON chunks USING hnsw (embedding vector_cosine_ops);
