@@ -1,12 +1,35 @@
-# Local stack: PostgreSQL + pgvector (storage stage) and Ollama (local LLM for
-# the augmentation/generation step).
+# Local stack: the app plus its dependencies -- PostgreSQL + pgvector (storage)
+# and Ollama (embedding + generation). Bring the whole thing up with:
 #
-#   docker compose up -d
+#   docker compose up -d --build      # app on http://localhost:8000
 #   DATABASE_URL=postgresql://rag:rag@localhost:5435/rag uv run pytest -m integration
+#
+# Services reach each other by name on the internal network (db:5432,
+# ollama:11434); the published ports are only for host access.
 #
 # Credentials default to local-dev values (rag/rag); override them via the shell
 # or a .env file. These are NOT production secrets -- never point this at real data.
 services:
+  app:
+    # The FastAPI app (see Dockerfile). DATABASE_URL and OLLAMA_* are built here
+    # from the db/ollama service config, so the app talks to them over the
+    # internal network -- no host ports, nothing to set by hand.
+    build: .
+    container_name: rag-app
+    depends_on:
+      db:
+        condition: service_healthy
+      ollama:
+        condition: service_healthy
+      ollama-pull:
+        condition: service_completed_successfully
+    environment:
+      DATABASE_URL: "postgresql://${POSTGRES_USER:-rag}:${POSTGRES_PASSWORD:-rag}@db:5432/${POSTGRES_DB:-rag}"
+      OLLAMA_BASE_URL: "http://ollama:11434"
+      OLLAMA_MODEL: "${OLLAMA_MODEL:-gemma2:2b}"
+      OLLAMA_EMBED_MODEL: "${OLLAMA_EMBED_MODEL:-nomic-embed-text}"
+    ports:
+      - "${APP_PORT:-8000}:8000"
   db:
     # Postgres with the pgvector extension preinstalled (matches vector(768) in
     # db/schema.sql). Pinned to a major version for reproducibility.

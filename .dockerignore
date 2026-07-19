@@ -1,0 +1,21 @@
+# Keep the build context small and the image clean. The host virtualenv is
+# platform-specific and must never overwrite the one built in the image.
+.venv/
+.git/
+.github/
+.githooks/
+.idea/
+.claude/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Secrets / local config never belong in the image.
+.env
+
+# Not needed at runtime.
+tests/
+evals/
+*.egg-info/
