@@ -11,7 +11,7 @@ from unittest.mock import MagicMock
 import pytest
 from fastapi.testclient import TestClient
 
-from api import app, get_storage
+from api import app, get_llm, get_storage
 from dtos.responses import RetrievedChunk, StoredDocument
 
 client = TestClient(app)
@@ -27,6 +27,15 @@ def fake_storage() -> Iterator[MagicMock]:
     app.dependency_overrides[get_storage] = lambda: storage
     yield storage
     app.dependency_overrides.pop(get_storage, None)
+
+
+@pytest.fixture
+def fake_llm() -> Iterator[MagicMock]:
+    """Override the LLM dependency with a fake so no model is called."""
+    llm = MagicMock()
+    app.dependency_overrides[get_llm] = lambda: llm
+    yield llm
+    app.dependency_overrides.pop(get_llm, None)
 
 
 def test_pdf_is_chunked_and_stored_with_fixed_strategy(
@@ -165,5 +174,46 @@ def test_retrieve_returns_matching_chunks(fake_storage: MagicMock) -> None:
 
 def test_retrieve_requires_a_query() -> None:
     response = client.post("/retrieve", json={"access_role": "analyst"})
+
+    assert response.status_code == 422
+
+
+def test_answer_generates_from_retrieved_context(
+    fake_storage: MagicMock, fake_llm: MagicMock
+) -> None:
+    fake_storage.search_chunks.return_value = [
+        RetrievedChunk(
+            document_id=1,
+            document_name="biology.pdf",
+            chunk_index=0,
+            page_number=1,
+            text="Plants convert sunlight into energy.",
+            score=0.9,
+        )
+    ]
+    fake_llm.generate.return_value = "Plants use photosynthesis [1]."
+
+    response = client.post(
+        "/answer",
+        json={
+            "query": "how do plants get energy",
+            "access_role": "student",
+            "top_k": 3,
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["query"] == "how do plants get energy"
+    assert body["answer"] == "Plants use photosynthesis [1]."
+    assert body["sources"][0]["text"] == "Plants convert sunlight into energy."
+    # The augmented prompt (context + question) reached the model.
+    prompt = fake_llm.generate.call_args.args[0]
+    assert "Plants convert sunlight into energy." in prompt
+    assert "how do plants get energy" in prompt
+
+
+def test_answer_requires_a_query(fake_llm: MagicMock) -> None:
+    response = client.post("/answer", json={"access_role": "student"})
 
     assert response.status_code == 422

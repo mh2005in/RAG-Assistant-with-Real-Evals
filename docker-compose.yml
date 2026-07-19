@@ -1,4 +1,5 @@
-# Local PostgreSQL + pgvector for the storage stage.
+# Local stack: PostgreSQL + pgvector (storage stage) and Ollama (local LLM for
+# the augmentation/generation step).
 #
 #   docker compose up -d
 #   DATABASE_URL=postgresql://rag:rag@localhost:5435/rag uv run pytest -m integration
@@ -30,5 +31,43 @@ services:
       timeout: 5s
       retries: 5
 
+  ollama:
+    # Local LLM server for the augmentation (RAG generation) step. Runs on CPU by
+    # default so it works everywhere; uncomment the deploy block below to use an
+    # NVIDIA GPU (needs the NVIDIA Container Toolkit).
+    image: ollama/ollama:latest
+    container_name: rag-ollama
+    ports:
+      - "${OLLAMA_PORT:-11434}:11434"
+    volumes:
+      # Persist pulled models so they are not re-downloaded on restart.
+      - ollama:/root/.ollama
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: all
+    #           capabilities: [gpu]
+
+  # One-shot helper: waits for the server, pulls the model, then exits. `pull` is
+  # idempotent, so on later `up`s it just confirms the model is present. Override
+  # the model with $OLLAMA_MODEL (default gemma2:2b, a small ~2B model).
+  ollama-pull:
+    image: ollama/ollama:latest
+    depends_on:
+      ollama:
+        condition: service_healthy
+    environment:
+      OLLAMA_HOST: http://ollama:11434
+    entrypoint: ["ollama", "pull", "${OLLAMA_MODEL:-gemma2:2b}"]
+    restart: "no"
+
 volumes:
   pgdata:
+  ollama:
