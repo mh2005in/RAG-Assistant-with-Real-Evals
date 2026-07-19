@@ -69,6 +69,12 @@ DATABASE_URL=postgresql://rag:rag@localhost:5435/rag uv run pytest -m integratio
 `db/schema.sql` is applied only when the data volume is first created; after
 editing it, re-run with `docker compose down -v && docker compose up -d`.
 
+With the database up, `POST /process` (multipart: `file`, `strategy`, `name`,
+`access_role`, ...) chunks, embeds, and stores a document, and `POST /retrieve`
+(JSON: `query`, `access_role`, `top_k`) runs a pgvector similarity search over
+the stored chunks — filtered to the given `access_role` — returning the closest
+chunks with cosine-similarity scores.
+
 ### 6. Validation
 
 Validate structured inputs and outputs:

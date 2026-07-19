@@ -1,12 +1,13 @@
 """PostgreSQL + pgvector storage service (storage stage).
 
-Persists a document and its embedded chunks into the schema defined in
-``db/schema.sql`` (the ``documents`` and ``chunks`` tables). Connection details
-come from config/env, never hardcoded (see CLAUDE.md): :meth:`PostgresStorage.connect`
+Data access for the ``documents`` and ``chunks`` tables defined in
+``db/schema.sql``: writes a document and its embedded chunks, and runs the
+pgvector similarity search behind retrieval. Connection details come from
+config/env, never hardcoded (see CLAUDE.md): :meth:`PostgresStorage.connect`
 reads ``DATABASE_URL`` unless an explicit connection string is passed.
 
-Retrieval (similarity search) is a separate concern and lives elsewhere; this
-service only writes.
+This owns the SQL against those tables; embedding the query text for a search is
+orchestration and lives in the retrieval service.
 """
 
 import os
@@ -15,7 +16,7 @@ import psycopg
 from pgvector import Vector
 from pgvector.psycopg import register_vector
 
-from dtos.responses import Chunk, StoredDocument
+from dtos.responses import Chunk, RetrievedChunk, StoredDocument
 
 _CONN_ENV_VAR = "DATABASE_URL"
 
@@ -30,6 +31,25 @@ _INSERT_CHUNK = """
         page_word_count, page_sentence_count_raw, page_token_count,
         text, embedding
     ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+"""
+# Nearest-neighbour search by cosine distance (``<=>``), which matches the HNSW
+# index in db/schema.sql. Restricted to the caller's access role and to chunks
+# that have actually been embedded. The query vector is bound once as a named
+# parameter and referenced in both the SELECT and the ORDER BY.
+_SEARCH_CHUNKS = """
+    SELECT
+        c.document_id,
+        d.name AS document_name,
+        c.chunk_index,
+        c.page_number,
+        c.text,
+        c.embedding <=> %(query)s AS distance
+    FROM chunks c
+    JOIN documents d ON d.id = c.document_id
+    WHERE d.access_role = %(access_role)s
+      AND c.embedding IS NOT NULL
+    ORDER BY c.embedding <=> %(query)s
+    LIMIT %(top_k)s
 """
 
 
@@ -89,6 +109,39 @@ class PostgresStorage:
                 )
 
         return StoredDocument(document_id=document_id, chunk_count=len(chunks))
+
+    def search_chunks(
+        self, query_embedding: list[float], access_role: str, top_k: int
+    ) -> list[RetrievedChunk]:
+        """Return the ``top_k`` chunks most similar to ``query_embedding``.
+
+        Searches only chunks belonging to documents with ``access_role`` (the
+        role-based access filter) and ranks them by cosine distance. The raw
+        cosine distance is converted to a similarity score (``1 - distance``) so
+        higher means closer. ``query_embedding`` must have the same dimension as
+        the stored vectors (the embedding model must match the one used to store).
+        """
+        with self._conn.cursor() as cur:
+            cur.execute(
+                _SEARCH_CHUNKS,
+                {
+                    "query": Vector(query_embedding),
+                    "access_role": access_role,
+                    "top_k": top_k,
+                },
+            )
+            rows = cur.fetchall()
+        return [
+            RetrievedChunk(
+                document_id=document_id,
+                document_name=document_name,
+                chunk_index=chunk_index,
+                page_number=page_number,
+                text=text,
+                score=1.0 - float(distance),
+            )
+            for document_id, document_name, chunk_index, page_number, text, distance in rows
+        ]
 
     @staticmethod
     def _chunk_row(document_id: int, index: int, chunk: Chunk) -> tuple[object, ...]:

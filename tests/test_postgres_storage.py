@@ -18,7 +18,7 @@ from pgvector import Vector
 import services.storage.postgres as postgres_module
 from dtos.responses import Chunk
 from services.storage import PostgresStorage
-from services.storage.postgres import _INSERT_CHUNK, _INSERT_DOCUMENT
+from services.storage.postgres import _INSERT_CHUNK, _INSERT_DOCUMENT, _SEARCH_CHUNKS
 
 
 def _mock_connection(document_id: int = 42) -> tuple[MagicMock, MagicMock]:
@@ -106,6 +106,35 @@ def test_missing_returned_id_raises() -> None:
         PostgresStorage(conn).insert_document("doc.pdf", "analyst", [])
 
 
+def test_search_chunks_runs_similarity_query_and_maps_rows() -> None:
+    conn, cursor = _mock_connection()
+    cursor.fetchall.return_value = [
+        (7, "doc.pdf", 0, 1, "alpha", 0.25),
+        (7, "doc.pdf", 1, 2, "beta", 0.5),
+    ]
+
+    results = PostgresStorage(conn).search_chunks([0.1, 0.2], "analyst", top_k=5)
+
+    # The query vector is bound once (named param) and role/top_k passed through.
+    sql, params = cursor.execute.call_args.args
+    assert sql == _SEARCH_CHUNKS
+    assert params == {
+        "query": Vector([0.1, 0.2]),
+        "access_role": "analyst",
+        "top_k": 5,
+    }
+
+    # Rows map to RetrievedChunk, and cosine distance becomes a 1 - d similarity.
+    assert [(r.text, r.chunk_index, r.page_number) for r in results] == [
+        ("alpha", 0, 1),
+        ("beta", 1, 2),
+    ]
+    assert results[0].document_id == 7
+    assert results[0].document_name == "doc.pdf"
+    assert results[0].score == pytest.approx(0.75)
+    assert results[1].score == pytest.approx(0.5)
+
+
 def test_connect_requires_a_connection_string(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -169,6 +198,42 @@ def test_insert_and_read_back_roundtrip() -> None:
             assert len(embedding.to_list()) == 768
 
             cur.execute("DELETE FROM documents WHERE id = %s", (result.document_id,))
+        storage._conn.commit()
+    finally:
+        storage.close()
+
+
+@pytest.mark.integration
+def test_search_ranks_by_similarity_and_filters_by_role() -> None:
+    """Insert two chunks, search, and check ranking + the access-role filter.
+
+    Requires ``DATABASE_URL`` (see the roundtrip test). Cleans up after itself.
+    """
+    conn_str = os.environ.get("DATABASE_URL")
+    if not conn_str:
+        pytest.skip("DATABASE_URL not set; skipping database integration test")
+
+    near = [1.0] + [0.0] * 767
+    far = [0.0, 1.0] + [0.0] * 766
+
+    storage = PostgresStorage.connect(conn_str)
+    try:
+        stored = storage.insert_document(
+            "search-doc",
+            "searcher",
+            [_embedded(1, "near chunk", near), _embedded(2, "far chunk", far)],
+        )
+
+        results = storage.search_chunks(near, "searcher", top_k=5)
+        assert [r.text for r in results] == ["near chunk", "far chunk"]
+        assert results[0].score > results[1].score
+        assert results[0].document_name == "search-doc"
+
+        # Role-based filter: a different role sees nothing.
+        assert storage.search_chunks(near, "other-role", top_k=5) == []
+
+        with storage._conn.cursor() as cur:
+            cur.execute("DELETE FROM documents WHERE id = %s", (stored.document_id,))
         storage._conn.commit()
     finally:
         storage.close()

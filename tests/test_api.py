@@ -12,7 +12,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from api import app, get_storage
-from dtos.responses import StoredDocument
+from dtos.responses import RetrievedChunk, StoredDocument
 
 client = TestClient(app)
 
@@ -130,5 +130,40 @@ def test_name_and_access_role_are_required(
         data={"strategy": "fixed", "fixed_size": '{"chunk_size": 8}'},
         files={"file": ("doc.pdf", pdf, "application/pdf")},
     )
+
+    assert response.status_code == 422
+
+
+def test_retrieve_returns_matching_chunks(fake_storage: MagicMock) -> None:
+    fake_storage.search_chunks.return_value = [
+        RetrievedChunk(
+            document_id=1,
+            document_name="doc.pdf",
+            chunk_index=0,
+            page_number=2,
+            text="the matching chunk",
+            score=0.87,
+        )
+    ]
+
+    response = client.post(
+        "/retrieve",
+        json={"query": "find the chunk", "access_role": "analyst", "top_k": 3},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["query"] == "find the chunk"
+    assert body["count"] == 1
+    assert body["results"][0]["text"] == "the matching chunk"
+    assert body["results"][0]["score"] == 0.87
+    # The role and top_k reached the search unchanged.
+    _, access_role, top_k = fake_storage.search_chunks.call_args.args
+    assert access_role == "analyst"
+    assert top_k == 3
+
+
+def test_retrieve_requires_a_query() -> None:
+    response = client.post("/retrieve", json={"access_role": "analyst"})
 
     assert response.status_code == 422
