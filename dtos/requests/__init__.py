@@ -4,6 +4,7 @@ from dtos.requests.chunking import (
     PageRange,
 )
 from dtos.requests.embedding import DEFAULT_MODEL_NAME, Device, EmbeddingRequest
+from dtos.requests.retrieval import RetrievalRequest
 
 __all__ = [
     "DEFAULT_MODEL_NAME",
@@ -12,4 +13,5 @@ __all__ = [
     "EmbeddingRequest",
     "FixedSizeChunkingRequest",
     "PageRange",
+    "RetrievalRequest",
 ]

@@ -9,14 +9,16 @@ from collections.abc import Iterator
 from fastapi import Depends, FastAPI, File, Form, HTTPException, UploadFile
 from pydantic import ValidationError
 
-from dtos.requests import ChunkingStrategy, FixedSizeChunkingRequest
-from dtos.responses import ProcessResponse
+from dtos.requests import ChunkingStrategy, FixedSizeChunkingRequest, RetrievalRequest
+from dtos.responses import ProcessResponse, RetrievalResponse
 from services.file_processing import FileProcessing
+from services.retrieval import Retrieval
 from services.storage import PostgresStorage
 
 app = FastAPI(title="RAG Assistant — File Processing")
 
 file_processing = FileProcessing()
+retrieval = Retrieval()
 
 
 def get_storage() -> Iterator[PostgresStorage]:
@@ -81,6 +83,18 @@ async def process(
         content_type=file.content_type,
         storage=storage,
     )
+
+
+@app.post("/retrieve", response_model=RetrievalResponse)
+async def retrieve(
+    request: RetrievalRequest,
+    storage: PostgresStorage = Depends(get_storage),
+) -> RetrievalResponse:
+    """Embed the query and return the most similar stored chunks.
+
+    Only chunks of documents with the request's ``access_role`` are searched.
+    """
+    return retrieval.retrieve(request, storage)
 
 
 if __name__ == "__main__":
