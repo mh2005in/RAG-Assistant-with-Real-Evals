@@ -1,3 +1,4 @@
+from dtos.requests.answer import AnswerRequest
 from dtos.requests.chunking import (
     ChunkingStrategy,
     FixedSizeChunkingRequest,
@@ -8,6 +9,7 @@ from dtos.requests.retrieval import RetrievalRequest
 
 __all__ = [
     "DEFAULT_MODEL_NAME",
+    "AnswerRequest",
     "ChunkingStrategy",
     "Device",
     "EmbeddingRequest",

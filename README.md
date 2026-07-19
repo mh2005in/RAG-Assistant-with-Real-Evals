@@ -54,7 +54,7 @@ tables ([`db/schema.sql`](db/schema.sql)); `PostgresStorage`
 
 ```bash
 cp .env.example .env            # local-dev credentials (see .env.example)
-docker compose up -d            # Postgres + pgvector; applies db/schema.sql on first boot
+docker compose up -d            # Postgres + pgvector (applies db/schema.sql) and Ollama (pulls the model)
 ```
 
 The default connection string is `postgresql://rag:rag@localhost:5435/rag`
@@ -75,7 +75,22 @@ With the database up, `POST /process` (multipart: `file`, `strategy`, `name`,
 the stored chunks — filtered to the given `access_role` — returning the closest
 chunks with cosine-similarity scores.
 
-### 6. Validation
+### 6. Augmented generation
+
+Answer questions from the stored documents (the "AG" in RAG):
+
+- **Ollama** serving a local LLM (default `gemma2:2b`)
+
+`POST /answer` (JSON: `query`, `access_role`, `top_k`) retrieves the most
+relevant chunks, builds a prompt that grounds the model in them (the *augment*
+step), and returns the generated answer with its source chunks. The LLM backend
+lives behind the `LLMClient` interface
+([`services/generation/`](services/generation/)) and the server/model come from
+`$OLLAMA_BASE_URL` and `$OLLAMA_MODEL`. The compose stack runs Ollama and pulls
+the model; swap it via `OLLAMA_MODEL` (e.g. `llama3.2:3b`), then
+`docker compose up -d ollama-pull`.
+
+### 7. Validation
 
 Validate structured inputs and outputs:
 

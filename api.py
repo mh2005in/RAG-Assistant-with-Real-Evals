@@ -9,9 +9,16 @@ from collections.abc import Iterator
 from fastapi import Depends, FastAPI, File, Form, HTTPException, UploadFile
 from pydantic import ValidationError
 
-from dtos.requests import ChunkingStrategy, FixedSizeChunkingRequest, RetrievalRequest
-from dtos.responses import ProcessResponse, RetrievalResponse
+from dtos.requests import (
+    AnswerRequest,
+    ChunkingStrategy,
+    FixedSizeChunkingRequest,
+    RetrievalRequest,
+)
+from dtos.responses import AnswerResponse, ProcessResponse, RetrievalResponse
+from services.answering import Answering
 from services.file_processing import FileProcessing
+from services.generation import LLMClient, OllamaClient
 from services.retrieval import Retrieval
 from services.storage import PostgresStorage
 
@@ -19,6 +26,7 @@ app = FastAPI(title="RAG Assistant — File Processing")
 
 file_processing = FileProcessing()
 retrieval = Retrieval()
+answering = Answering()
 
 
 def get_storage() -> Iterator[PostgresStorage]:
@@ -33,6 +41,14 @@ def get_storage() -> Iterator[PostgresStorage]:
         yield storage
     finally:
         storage.close()
+
+
+def get_llm() -> LLMClient:
+    """Provide the LLM client for a request (Ollama, from the ``$OLLAMA_*`` env).
+
+    Tests override this dependency with a fake so they never call a real model.
+    """
+    return OllamaClient.from_env()
 
 
 @app.post("/process", response_model=ProcessResponse)
@@ -95,6 +111,20 @@ async def retrieve(
     Only chunks of documents with the request's ``access_role`` are searched.
     """
     return retrieval.retrieve(request, storage)
+
+
+@app.post("/answer", response_model=AnswerResponse)
+async def answer(
+    request: AnswerRequest,
+    storage: PostgresStorage = Depends(get_storage),
+    llm: LLMClient = Depends(get_llm),
+) -> AnswerResponse:
+    """Retrieve context for the question and generate a grounded answer.
+
+    Retrieves chunks of documents with the request's ``access_role``, passes them
+    to the LLM as context, and returns the answer with those chunks as sources.
+    """
+    return answering.answer(request, storage, llm)
 
 
 if __name__ == "__main__":
