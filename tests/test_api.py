@@ -48,7 +48,7 @@ def test_pdf_is_chunked_and_stored_with_fixed_strategy(
             "strategy": "fixed",
             "name": "report.pdf",
             "access_role": "analyst",
-            "fixed_size": '{"chunk_size": 8}',
+            "chunk_size": "8",
         },
         files={"file": ("doc.pdf", pdf, "application/pdf")},
     )
@@ -83,7 +83,8 @@ def test_excluded_pages_are_dropped(
             "strategy": "fixed",
             "name": "report.pdf",
             "access_role": "analyst",
-            "fixed_size": '{"chunk_size": 1000, "exclude_pages": [2]}',
+            "chunk_size": "1000",
+            "exclude_pages": "[2]",
         },
         files={"file": ("doc.pdf", pdf, "application/pdf")},
     )
@@ -92,6 +93,110 @@ def test_excluded_pages_are_dropped(
     joined = "".join(chunk["text"] for chunk in response.json()["chunks"])
     assert "KEEPME" in joined
     assert "DROPME" not in joined
+
+
+def test_exclude_pages_accepts_mixed_numbers_and_ranges(
+    make_pdf: Callable[[list[str]], bytes],
+) -> None:
+    # Regression: the field takes a bare JSON array; a mix of a page number and
+    # an inclusive range must be accepted (not "Input should be an object").
+    pdf = make_pdf(["ONE", "TWO", "THREE", "FOUR"])
+    response = client.post(
+        "/process",
+        data={
+            "strategy": "fixed",
+            "name": "report.pdf",
+            "access_role": "analyst",
+            "chunk_size": "1000",
+            "exclude_pages": '[1, {"start": 3, "end": 4}]',
+        },
+        files={"file": ("doc.pdf", pdf, "application/pdf")},
+    )
+
+    assert response.status_code == 200
+    joined = "".join(chunk["text"] for chunk in response.json()["chunks"])
+    assert joined.strip() == "TWO"
+
+
+def test_malformed_exclude_pages_error_names_the_field(
+    make_pdf: Callable[[list[str]], bytes],
+) -> None:
+    # The 422 must say which field was malformed, not just the bare pydantic
+    # message with no hint of where it came from.
+    pdf = make_pdf(["ONE"])
+    response = client.post(
+        "/process",
+        data={
+            "strategy": "fixed",
+            "name": "report.pdf",
+            "access_role": "analyst",
+            "chunk_size": "100",
+            "exclude_pages": "not json at all",
+        },
+        files={"file": ("doc.pdf", pdf, "application/pdf")},
+    )
+
+    assert response.status_code == 422
+    assert response.json()["detail"][0]["loc"][0] == "exclude_pages"
+
+
+def test_non_positive_chunk_size_is_rejected(
+    make_pdf: Callable[[list[str]], bytes],
+) -> None:
+    pdf = make_pdf(["ONE"])
+    response = client.post(
+        "/process",
+        data={
+            "strategy": "fixed",
+            "name": "report.pdf",
+            "access_role": "analyst",
+            "chunk_size": "0",
+        },
+        files={"file": ("doc.pdf", pdf, "application/pdf")},
+    )
+
+    assert response.status_code == 422
+
+
+def test_page_exclusion_is_optional_and_independent_of_strategy(
+    make_pdf: Callable[[list[str]], bytes],
+) -> None:
+    # No page_exclusion field at all: everything is chunked.
+    pdf = make_pdf(["KEEPME", "ALSOME"])
+    response = client.post(
+        "/process",
+        data={
+            "strategy": "fixed",
+            "name": "report.pdf",
+            "access_role": "analyst",
+            "chunk_size": "1000",
+        },
+        files={"file": ("doc.pdf", pdf, "application/pdf")},
+    )
+
+    assert response.status_code == 200
+    joined = "".join(chunk["text"] for chunk in response.json()["chunks"])
+    assert "KEEPME" in joined
+    assert "ALSOME" in joined
+
+
+def test_invalid_page_exclusion_is_rejected(
+    make_pdf: Callable[[list[str]], bytes],
+) -> None:
+    pdf = make_pdf(["anything"])
+    response = client.post(
+        "/process",
+        data={
+            "strategy": "fixed",
+            "name": "report.pdf",
+            "access_role": "analyst",
+            "chunk_size": "1000",
+            "exclude_pages": "[0]",
+        },
+        files={"file": ("doc.pdf", pdf, "application/pdf")},
+    )
+
+    assert response.status_code == 422
 
 
 def test_non_pdf_is_detected_but_not_chunked_or_stored(
@@ -103,7 +208,7 @@ def test_non_pdf_is_detected_but_not_chunked_or_stored(
             "strategy": "fixed",
             "name": "notes.txt",
             "access_role": "analyst",
-            "fixed_size": '{"chunk_size": 8}',
+            "chunk_size": "8",
         },
         files={"file": ("notes.txt", b"just some plain text", "text/plain")},
     )
@@ -117,7 +222,7 @@ def test_non_pdf_is_detected_but_not_chunked_or_stored(
     fake_storage.insert_document.assert_not_called()
 
 
-def test_fixed_strategy_requires_fixed_size(
+def test_fixed_strategy_requires_chunk_size(
     make_pdf: Callable[[list[str]], bytes],
 ) -> None:
     pdf = make_pdf(["anything"])
@@ -136,7 +241,7 @@ def test_name_and_access_role_are_required(
     pdf = make_pdf(["anything"])
     response = client.post(
         "/process",
-        data={"strategy": "fixed", "fixed_size": '{"chunk_size": 8}'},
+        data={"strategy": "fixed", "chunk_size": "8"},
         files={"file": ("doc.pdf", pdf, "application/pdf")},
     )
 

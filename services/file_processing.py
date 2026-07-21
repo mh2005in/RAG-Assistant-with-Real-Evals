@@ -11,7 +11,7 @@ apples-to-apples.
 
 import pymupdf
 
-from dtos.requests import ChunkingStrategy, FixedSizeChunkingRequest
+from dtos.requests import ChunkingStrategy, FixedSizeChunkingRequest, PageExclusion
 from dtos.responses import Chunk, DocType, ProcessResponse
 from services.chunking import FixedSizeChunker
 from services.embedding import Embedder, OllamaEmbedder
@@ -72,6 +72,25 @@ class FileProcessing:
         except Exception as exc:  # PyMuPDF surfaces several error types
             raise ValueError("content is not a readable PDF") from exc
 
+    @staticmethod
+    def _exclude_pages(pages: list[str], exclusion: PageExclusion | None) -> list[str]:
+        """Blank out the excluded pages, keeping every page's position.
+
+        Excluded pages are emptied rather than dropped so the remaining pages keep
+        their original 1-based numbers (chunkers read page N from index N-1) and
+        chunks stay attributed to the right page. An emptied page contributes no
+        text, so it is effectively excluded for any chunking strategy.
+        """
+        if exclusion is None:
+            return pages
+        excluded = exclusion.excluded_page_numbers()
+        if not excluded:
+            return pages
+        return [
+            "" if page_number in excluded else text
+            for page_number, text in enumerate(pages, start=1)
+        ]
+
     def process(
         self,
         content: bytes,
@@ -79,6 +98,7 @@ class FileProcessing:
         name: str,
         access_role: str,
         fixed_size: FixedSizeChunkingRequest | None = None,
+        page_exclusion: PageExclusion | None = None,
         filename: str | None = None,
         content_type: str | None = None,
         storage: PostgresStorage | None = None,
@@ -86,7 +106,8 @@ class FileProcessing:
         """Detect the document type, chunk it, and (if given) persist it.
 
         ``fixed_size`` carries the fixed-size chunking parameters and is required
-        when ``strategy`` is :attr:`ChunkingStrategy.fixed`.
+        when ``strategy`` is :attr:`ChunkingStrategy.fixed`. ``page_exclusion`` is
+        strategy-agnostic and is applied to the extracted pages before chunking.
 
         When chunks are produced and a ``storage`` is supplied, the document is
         saved under ``name``/``access_role`` with its chunks, and the new
@@ -110,7 +131,9 @@ class FileProcessing:
 
         if doc_type is DocType.pdf and strategy is ChunkingStrategy.fixed:
             assert fixed_size is not None  # guaranteed by the guard above
-            pages = self._extract_pdf_pages(content)
+            pages = self._exclude_pages(
+                self._extract_pdf_pages(content), page_exclusion
+            )
             paged = FixedSizeChunker(fixed_size).chunk_with_pages(pages)
             chunks = [Chunk.from_page(page_number, text) for page_number, text in paged]
             document_id: int | None = None

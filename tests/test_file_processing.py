@@ -5,7 +5,11 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from dtos.requests import ChunkingStrategy, FixedSizeChunkingRequest
+from dtos.requests import (
+    ChunkingStrategy,
+    FixedSizeChunkingRequest,
+    PageExclusion,
+)
 from dtos.responses import DocType, StoredDocument
 from services.file_processing import FileProcessing
 
@@ -59,6 +63,34 @@ class TestExtractPdfPages:
     def test_rejects_non_pdf_bytes(self) -> None:
         with pytest.raises(ValueError, match="not a readable PDF"):
             service._extract_pdf_pages(b"this is plainly not a pdf")
+
+
+class TestExcludePages:
+    """Page exclusion is strategy-agnostic and runs before chunking."""
+
+    def test_no_exclusion_returns_pages_unchanged(self) -> None:
+        pages = ["one", "two"]
+
+        assert service._exclude_pages(pages, None) == pages
+        assert service._exclude_pages(pages, PageExclusion()) == pages
+
+    def test_excluded_pages_are_blanked_not_dropped(self) -> None:
+        # Blanking keeps page 3 at index 2, so chunks stay attributed correctly.
+        exclusion = PageExclusion.model_validate({"exclude_pages": [2]})
+
+        assert service._exclude_pages(["a", "b", "c"], exclusion) == ["a", "", "c"]
+
+    def test_excludes_ranges_and_single_pages(self) -> None:
+        exclusion = PageExclusion.model_validate(
+            {"exclude_pages": [1, {"start": 3, "end": 4}]}
+        )
+
+        assert service._exclude_pages(["a", "b", "c", "d"], exclusion) == [
+            "",
+            "b",
+            "",
+            "",
+        ]
 
 
 class TestProcess:
@@ -126,6 +158,40 @@ class TestProcess:
         assert response.chunk_count == 0
         assert response.document_id is None
         storage.insert_document.assert_not_called()
+
+    def test_excluded_pages_are_left_out_of_chunks(
+        self, make_pdf: Callable[[list[str]], bytes]
+    ) -> None:
+        response = service.process(
+            make_pdf(["KEEPME one", "DROPME two", "KEEPTOO three"]),
+            ChunkingStrategy.fixed,
+            "report.pdf",
+            "analyst",
+            FixedSizeChunkingRequest(chunk_size=100),
+            PageExclusion.model_validate({"exclude_pages": [2]}),
+        )
+
+        joined = " ".join(chunk.text for chunk in response.chunks)
+        assert "KEEPME" in joined
+        assert "KEEPTOO" in joined
+        assert "DROPME" not in joined
+        # The surviving text still starts on page 1.
+        assert response.chunks[0].page_number == 1
+
+    def test_exclusion_preserves_page_numbers_of_later_pages(
+        self, make_pdf: Callable[[list[str]], bytes]
+    ) -> None:
+        response = service.process(
+            make_pdf(["DROPME one", "KEEPME two"]),
+            ChunkingStrategy.fixed,
+            "report.pdf",
+            "analyst",
+            FixedSizeChunkingRequest(chunk_size=100),
+            PageExclusion.model_validate({"exclude_pages": [1]}),
+        )
+
+        # Page 1 was excluded, so the only chunk must still report page 2.
+        assert [chunk.page_number for chunk in response.chunks] == [2]
 
     def test_fixed_strategy_requires_fixed_size(self) -> None:
         with pytest.raises(ValueError, match="fixed_size parameters are required"):

@@ -1,12 +1,22 @@
-"""Tests for the fixed-size chunker."""
+"""Tests for the fixed-size chunker.
+
+Page exclusion is applied upstream (see the FileProcessing tests); the chunker
+only groups the words of whatever pages it is handed.
+"""
 
 from dtos.requests import FixedSizeChunkingRequest
 from services.chunking import FixedSizeChunker
 
 
-def _chunk(pages: list[str], **kwargs: object) -> list[str]:
-    request = FixedSizeChunkingRequest.model_validate({"chunk_size": 2, **kwargs})
-    return FixedSizeChunker(request).chunk(pages)
+def _chunk(pages: list[str], chunk_size: int = 2) -> list[str]:
+    return FixedSizeChunker(FixedSizeChunkingRequest(chunk_size=chunk_size)).chunk(
+        pages
+    )
+
+
+def _chunk_with_pages(pages: list[str], chunk_size: int = 2) -> list[tuple[int, str]]:
+    request = FixedSizeChunkingRequest(chunk_size=chunk_size)
+    return FixedSizeChunker(request).chunk_with_pages(pages)
 
 
 def test_groups_page_words_into_fixed_windows() -> None:
@@ -23,35 +33,12 @@ def test_normalizes_intra_page_whitespace() -> None:
     assert _chunk(["a\t b\n\nc"], chunk_size=100) == ["a b c"]
 
 
-def test_excludes_single_page_numbers() -> None:
-    chunks = _chunk(["p1", "p2", "p3"], chunk_size=100, exclude_pages=[2])
-    assert chunks == ["p1 p3"]
-
-
-def test_excludes_page_ranges() -> None:
-    chunks = _chunk(
-        ["p1", "p2", "p3", "p4"],
-        chunk_size=100,
-        exclude_pages=[{"start": 1, "end": 2}],
-    )
-    assert chunks == ["p3 p4"]
-
-
-def test_all_pages_excluded_yields_no_chunks() -> None:
-    assert _chunk(["p1", "p2"], chunk_size=100, exclude_pages=[1, 2]) == []
-
-
 def test_no_pages_yields_no_chunks() -> None:
     assert _chunk([], chunk_size=100) == []
 
 
 def test_pages_without_words_yield_no_chunks() -> None:
     assert _chunk(["", "   \n\t "], chunk_size=100) == []
-
-
-def _chunk_with_pages(pages: list[str], **kwargs: object) -> list[tuple[int, str]]:
-    request = FixedSizeChunkingRequest.model_validate({"chunk_size": 2, **kwargs})
-    return FixedSizeChunker(request).chunk_with_pages(pages)
 
 
 def test_chunk_with_pages_tags_each_window_with_its_start_page() -> None:
@@ -64,17 +51,14 @@ def test_chunk_with_pages_tags_each_window_with_its_start_page() -> None:
     ]
 
 
-def test_chunk_with_pages_reports_page_after_exclusion() -> None:
-    # Page 2 is dropped, so the kept words are page 1 then page 3.
-    assert _chunk_with_pages(["p1", "p2", "p3"], chunk_size=100, exclude_pages=[2]) == [
-        (1, "p1 p3")
-    ]
-
-
 def test_chunk_with_pages_maps_later_window_to_later_page() -> None:
-    # Words [a1, a2] (page 1) then [b1, b2] (page 2), windows of 2 words:
-    # [a1,a2]->page 1, [b1,b2]->page 2.
     assert _chunk_with_pages(["a1 a2", "b1 b2"]) == [
         (1, "a1 a2"),
         (2, "b1 b2"),
     ]
+
+
+def test_blank_page_contributes_nothing_but_keeps_page_numbering() -> None:
+    # An excluded page arrives blank; later pages must keep their real numbers.
+    assert _chunk_with_pages(["a b", "", "c d"], chunk_size=100) == [(1, "a b c d")]
+    assert _chunk_with_pages(["", "c d"], chunk_size=100) == [(2, "c d")]
