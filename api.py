@@ -5,6 +5,7 @@ Run with:
 """
 
 from collections.abc import Iterator
+from typing import Any
 
 from fastapi import Depends, FastAPI, File, Form, HTTPException, UploadFile
 from pydantic import ValidationError
@@ -13,6 +14,7 @@ from dtos.requests import (
     AnswerRequest,
     ChunkingStrategy,
     FixedSizeChunkingRequest,
+    PageExclusion,
     RetrievalRequest,
 )
 from dtos.responses import AnswerResponse, ProcessResponse, RetrievalResponse
@@ -43,6 +45,20 @@ def get_storage() -> Iterator[PostgresStorage]:
         storage.close()
 
 
+def _validation_detail(field: str, exc: ValidationError) -> list[dict[str, Any]]:
+    """Build a 422 detail for a JSON-carrying form field.
+
+    Each error's ``loc`` is prefixed with the form field name, so a caller can
+    tell *which* field was malformed instead of getting a bare "Input should be
+    an object". ``include_context=False`` keeps the raw ValueError from a
+    validator (which is not JSON-serializable) out of the response body.
+    """
+    return [
+        {**error, "loc": (field, *error["loc"])}
+        for error in exc.errors(include_context=False)
+    ]
+
+
 def get_llm() -> LLMClient:
     """Provide the LLM client for a request (Ollama, from the ``$OLLAMA_*`` env).
 
@@ -59,34 +75,49 @@ async def process(
     access_role: str = Form(
         ..., description="Role permitted to access the stored document."
     ),
-    fixed_size: str | None = Form(
+    chunk_size: int | None = Form(
+        None,
+        gt=0,
+        description=(
+            "Words per chunk for the fixed-size strategy (e.g. 512). "
+            "Required when strategy is 'fixed'."
+        ),
+    ),
+    exclude_pages: str | None = Form(
         None,
         description=(
-            "JSON body of FixedSizeChunkingRequest "
-            '(e.g. {"chunk_size": 512, "exclude_pages": [1, {"start": 10, "end": 12}]}). '
-            "Required when strategy is 'fixed'."
+            "JSON array of pages to skip: page numbers and/or inclusive ranges "
+            '(e.g. [1, {"start": 10, "end": 12}]). '
+            "Optional, and applies to any chunking strategy."
         ),
     ),
     storage: PostgresStorage = Depends(get_storage),
 ) -> ProcessResponse:
     """Accept a file and chunking strategy; chunk, embed, and store it.
 
-    When ``strategy`` is ``fixed``, ``fixed_size`` must contain the JSON body
-    of a :class:`FixedSizeChunkingRequest`. Documents that produce chunks are
-    persisted under ``name``/``access_role`` and their ``document_id`` is
-    returned.
+    When ``strategy`` is ``fixed``, ``chunk_size`` (words per chunk) is required.
+    ``exclude_pages`` is an optional JSON array of page numbers/ranges and applies
+    to any strategy. Documents that produce chunks are persisted under
+    ``name``/``access_role`` and their ``document_id`` is returned.
     """
     fixed_request: FixedSizeChunkingRequest | None = None
     if strategy is ChunkingStrategy.fixed:
-        if fixed_size is None:
+        if chunk_size is None:
             raise HTTPException(
                 status_code=422,
-                detail="fixed_size is required when strategy is 'fixed'.",
+                detail="chunk_size is required when strategy is 'fixed'.",
             )
+        # chunk_size is already validated as a positive int by the Form above.
+        fixed_request = FixedSizeChunkingRequest(chunk_size=chunk_size)
+
+    exclusion: PageExclusion | None = None
+    if exclude_pages is not None:
         try:
-            fixed_request = FixedSizeChunkingRequest.model_validate_json(fixed_size)
+            exclusion = PageExclusion.from_json_array(exclude_pages)
         except ValidationError as exc:
-            raise HTTPException(status_code=422, detail=exc.errors()) from exc
+            raise HTTPException(
+                status_code=422, detail=_validation_detail("exclude_pages", exc)
+            ) from exc
 
     content = await file.read()
     return file_processing.process(
@@ -95,6 +126,7 @@ async def process(
         name,
         access_role,
         fixed_request,
+        exclusion,
         filename=file.filename,
         content_type=file.content_type,
         storage=storage,

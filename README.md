@@ -87,7 +87,7 @@ pulled models).
 
 ## Using the API
 
-**1. Process a document** (multipart form; `fixed_size` is a JSON string):
+**1. Process a document** (multipart form):
 
 ```bash
 curl -X POST http://localhost:8000/process \
@@ -95,14 +95,21 @@ curl -X POST http://localhost:8000/process \
   -F "strategy=fixed" \
   -F "name=mydoc.pdf" \
   -F "access_role=analyst" \
-  -F 'fixed_size={"chunk_size": 200}'
+  -F "chunk_size=200" \
+  -F 'exclude_pages=[1, {"start": 10, "end": 12}]'
 # -> { "processed": true, "doc_type": "pdf", "chunk_count": 12,
 #      "document_id": 1, "chunks": [ ... ] }
 ```
 
-`fixed_size` accepts `chunk_size` (number of **words** per chunk) and optional
-`exclude_pages` (a mix of page numbers and inclusive ranges, e.g.
-`[1, {"start": 10, "end": 12}]`).
+Chunking inputs are split by scope:
+
+- **`chunk_size`** — a plain positive integer, specific to the fixed-size
+  *strategy*: the number of **words** per chunk. Required when `strategy=fixed`.
+- **`exclude_pages`** — optional and **strategy-agnostic**: a JSON **array** of
+  page numbers and/or inclusive ranges, e.g. `[1, {"start": 10, "end": 12}]`.
+  It is applied to the extracted pages before chunking, so it works the same for
+  every strategy. Excluded pages don't shift the numbering of the pages that
+  remain.
 
 **2. Retrieve relevant chunks:**
 
