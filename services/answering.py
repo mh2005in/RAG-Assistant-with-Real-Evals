@@ -44,6 +44,7 @@ class Answering:
                 query=request.query,
                 access_role=request.access_role,
                 top_k=request.top_k,
+                chunking_strategy=request.chunking_strategy,
             ),
             storage,
         )

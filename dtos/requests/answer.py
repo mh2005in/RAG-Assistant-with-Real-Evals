@@ -7,6 +7,8 @@ context.
 
 from pydantic import BaseModel, Field
 
+from dtos.requests.chunking import ChunkingStrategy
+
 
 class AnswerRequest(BaseModel):
     """Parameters for answering a question from retrieved context."""
@@ -21,4 +23,11 @@ class AnswerRequest(BaseModel):
         gt=0,
         le=100,
         description="How many chunks to retrieve and pass to the model as context.",
+    )
+    chunking_strategy: ChunkingStrategy | None = Field(
+        default=None,
+        description=(
+            "Only search chunks produced by this chunking strategy. "
+            "Omit to search every strategy."
+        ),
     )

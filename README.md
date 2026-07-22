@@ -21,9 +21,10 @@ flowchart LR
     subgraph ingest["POST /process"]
       direction TB
       U["PDF upload"] --> EX["Extract text<br/>(PyMuPDF)"]
-      EX --> CH["Chunk<br/>(fixed-size, word-based)"]
+      EX --> CH["Chunk every strategy<br/>(fixed-size, semantic)"]
       CH --> EM1["Embed<br/>(Ollama)"]
-      EM1 --> ST[("PostgreSQL + pgvector<br/>documents, chunks")]
+      EM1 --> SC["Score + keep the best<br/>(cohesion vs separation)"]
+      SC --> ST[("PostgreSQL + pgvector<br/>documents, chunks")]
     end
     subgraph ask["POST /retrieve and /answer"]
       direction TB
@@ -36,9 +37,10 @@ flowchart LR
     ST -.-> SR
 ```
 
-- **`POST /process`** — detect + extract a PDF (PyMuPDF), chunk it, embed the
-  chunks, and store them under a name and access role. Returns the stored
-  document id and per-chunk stats.
+- **`POST /process`** — detect + extract a PDF (PyMuPDF), chunk it with **every**
+  strategy, embed and store them all, score each one, and keep only the winner's
+  chunks. You don't pick a strategy: the response reports every strategy's score
+  and names the one that remains.
 - **`POST /retrieve`** — embed a query and run a pgvector cosine similarity
   search over the stored chunks, filtered by access role. Returns the closest
   chunks with similarity scores.
@@ -92,22 +94,49 @@ pulled models).
 ```bash
 curl -X POST http://localhost:8000/process \
   -F "file=@mydoc.pdf;type=application/pdf" \
-  -F "strategy=fixed" \
   -F "name=mydoc.pdf" \
   -F "access_role=analyst" \
   -F "chunk_size=200" \
   -F 'exclude_pages=[1, {"start": 10, "end": 12}]'
-# -> { "processed": true, "doc_type": "pdf", "chunk_count": 12,
-#      "document_id": 1, "chunks": [ ... ] }
+# -> { "processed": true, "doc_type": "pdf", "document_id": 1,
+#      "chunking_strategy": "semantic",          # the one that remains
+#      "evaluations": [                          # best first
+#        {"strategy": "semantic", "chunk_count": 12, "mean_chunk_words": 84.2,
+#         "cohesion": 0.67, "separation": 0.49, "score": 0.18, "selected": true},
+#        {"strategy": "fixed", ..., "score": 0.0, "selected": false}
+#      ],
+#      "chunk_count": 12, "chunks": [ ... ] }
 ```
 
-Chunking inputs are split by scope:
+**No `strategy` field.** Every implemented strategy chunks the document, all of
+their chunks are stored against one `documents` row, each is scored, and the
+losers' chunks are deleted — so exactly one strategy survives per document.
+Re-processing the same document (same `name` + `access_role`) reuses that row and
+replaces its chunks, so the table never accumulates duplicates.
 
-- **`chunk_size`** — a plain positive integer, specific to the fixed-size
-  *strategy*: the number of **words** per chunk. Required when `strategy=fixed`.
+How the winner is chosen — a label-free, silhouette-style score over sentence
+embeddings:
+
+- **cohesion** — mean similarity between sentences *inside* a chunk (higher is
+  better: each chunk is about one thing).
+- **separation** — mean similarity between *neighbouring* chunks (lower is
+  better: boundaries fall where the content changes).
+- **score = cohesion − separation**, highest wins. The two terms balance:
+  over-splitting leaves neighbours nearly identical, under-splitting mixes topics
+  inside a chunk. A single-chunk candidate scores **0.0** (no structure found),
+  and a negative score means the split is worse than not splitting at all.
+
+> This measures chunk *structure*, not answer quality. It needs no labels, so it
+> runs on whatever you upload — but a retrieval eval against labelled queries is
+> the stronger signal, and is on the [Roadmap](#roadmap).
+
+The remaining inputs:
+
+- **`chunk_size`** — optional positive integer, tuning only the **fixed-size**
+  candidate (default 200 words). Other strategies choose their own boundaries.
 - **`exclude_pages`** — optional and **strategy-agnostic**: a JSON **array** of
   page numbers and/or inclusive ranges, e.g. `[1, {"start": 10, "end": 12}]`.
-  It is applied to the extracted pages before chunking, so it works the same for
+  Applied to the extracted pages before any chunking, so it works the same for
   every strategy. Excluded pages don't shift the numbering of the pages that
   remain.
 
@@ -117,8 +146,13 @@ Chunking inputs are split by scope:
 curl -X POST http://localhost:8000/retrieve \
   -H "Content-Type: application/json" \
   -d '{"query": "how are chunks embedded?", "access_role": "analyst", "top_k": 5}'
-# -> { "query": "...", "count": 5, "results": [ {document_name, page_number, text, score}, ... ] }
+# -> { "query": "...", "count": 5,
+#      "results": [ {document_name, chunking_strategy, page_number, text, score}, ... ] }
 ```
+
+Both `/retrieve` and `/answer` accept an optional `"chunking_strategy": "semantic"`
+to search only the chunks produced by that strategy — which is how the same
+document, chunked several ways, gets compared.
 
 **3. Ask a question** (retrieve + augmented generation):
 
@@ -146,6 +180,7 @@ and `ollama` service configs); override defaults through `.env` or the shell. Se
 | `APP_PORT` | `8000` | host port for the app |
 | `OLLAMA_MODEL` | `gemma2:2b` | generation model (`/answer`) |
 | `OLLAMA_EMBED_MODEL` | `nomic-embed-text` | embedding model (`/process`, `/retrieve`) |
+| `OLLAMA_GPU_COUNT` | `0` | GPUs given to Ollama: `0` = CPU, `all` = every NVIDIA GPU, `N` = N GPUs |
 | `OLLAMA_PORT` | `11434` | host port for Ollama |
 | `OLLAMA_BASE_URL` | `http://localhost:11434` | app → Ollama (compose sets `http://ollama:11434`) |
 | `DATABASE_URL` | `postgresql://rag:rag@localhost:5435/rag` | app/tests **on the host**; the container builds its own (`db:5432`) |
@@ -153,6 +188,35 @@ and `ollama` service configs); override defaults through `.env` or the shell. Se
 To swap an Ollama model, change `OLLAMA_MODEL` / `OLLAMA_EMBED_MODEL` and re-run
 `docker compose up -d ollama-pull`. A different embedding dimension would require
 a schema change (the `chunks.embedding` column is `vector(768)`).
+
+### CPU or CUDA
+
+Ollama runs both the embedding and the generation model, so it is the only
+service doing tensor maths — the app itself has no GPU dependency. Switch it with
+one variable and recreate the container:
+
+```bash
+OLLAMA_GPU_COUNT=all docker compose up -d ollama   # CUDA
+OLLAMA_GPU_COUNT=0   docker compose up -d ollama   # CPU (default, works everywhere)
+```
+
+Anything other than `0` needs the [NVIDIA Container
+Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html)
+on the host. Confirm which one is in use with `docker exec rag-ollama ollama ps`
+and read the `PROCESSOR` column.
+
+**GPU is not automatically a win on a small card.** The models must fit in VRAM
+together or Ollama reloads them on every switch. Measured on a 4 GB GTX 1650 with
+the defaults (`gemma2:2b` + `nomic-embed-text`, which together exceed 4 GB):
+
+| | generation | embedding (8 texts, warm) |
+| --- | --- | --- |
+| CPU | 10.9 tok/s | ~112 ms compute |
+| CUDA | **17.1 tok/s** | ~201 ms compute + **~1.3 s reload** |
+
+Generation gets ~1.6x faster, but embedding gets *slower* because the two models
+thrash VRAM. On a card that fits both (≥8 GB), or with a smaller generation model
+such as `llama3.2:1b`, both stages benefit.
 
 ## Project layout
 
@@ -165,12 +229,12 @@ services/
   file_processing.py       /process: detect → extract → chunk → embed → store
   retrieval.py             /retrieve: embed query → similarity search
   answering.py             /answer: retrieve → augment prompt → generate
-  chunking/                Chunker interface + fixed-size (word-based)
+  chunking/                Chunker interface + fixed-size and semantic strategies
   embedding/               Embedder interface + Ollama backend
   generation/              LLMClient interface + Ollama backend
   storage/                 PostgresStorage (pgvector reads/writes)
 db/schema.sql              documents + chunks tables, FK + HNSW cosine index
-evals/                     reproducible evals (fixed-size chunking baseline)
+evals/                     reproducible evals (chunking strategy comparison)
 tests/                     pytest: fast offline units + DB integration (marked)
 docker-compose.yml         app + Postgres/pgvector + Ollama
 Dockerfile                 app image (uv, uvicorn)
@@ -178,10 +242,20 @@ Dockerfile                 app image (uv, uvicorn)
 
 ### Data model
 
-- **`documents`** — `id`, `name`, `access_role`, `created_at`.
-- **`chunks`** — `id`, `document_id` (FK, cascade delete), `chunk_index`,
-  per-page stats, `text`, `embedding vector(768)`, `created_at`; with an HNSW
-  cosine index for similarity search. See [`db/schema.sql`](db/schema.sql).
+- **`documents`** — `id`, `name`, `access_role`, `created_at`, unique on
+  `(name, access_role)`. One row per document: processing the same document again
+  reuses its row and replaces its chunks, rather than adding a duplicate — the
+  chunks already record which strategy produced them.
+- **`chunks`** — `id`, `document_id` (FK, cascade delete), `chunking_strategy`,
+  `chunk_index`, per-page stats, `text`, `embedding vector(768)`, `created_at`;
+  with an HNSW cosine index for similarity search. See
+  [`db/schema.sql`](db/schema.sql).
+
+  `chunking_strategy` records which strategy produced each chunk. During
+  `/process` every strategy's chunks are written against the same `documents`
+  row (numbered from 0 *per strategy*), scored, and then all but the winner are
+  deleted — so a stored document ends up holding exactly one strategy's chunks.
+  `/retrieve` and `/answer` can still filter by it.
 
 ## Development
 
@@ -202,10 +276,12 @@ compose stack up:
 DATABASE_URL=postgresql://rag:rag@localhost:5435/rag uv run pytest -m integration
 ```
 
-**Evals** are reproducible and checked in as regenerable artifacts:
+**Evals** are reproducible and checked in as regenerable artifacts. The strategy
+comparison embeds sentences, so it needs the Ollama service running:
 
 ```bash
-uv run python -m evals.fixed_size_chunking_eval   # writes evals/results/fixed_size_chunking.json
+uv run python -m evals.fixed_size_chunking_eval    # fixed-size baseline sweep
+uv run python -m evals.chunking_strategies_eval   # fixed vs semantic, same document
 ```
 
 **Pre-commit hook:** a gitleaks secret scan runs on commit. Enable the repo's
@@ -217,12 +293,13 @@ hooks in a fresh clone with `git config core.hooksPath .githooks` (requires
 
 Planned but **not yet implemented**:
 
-- **More chunking strategies** — semantic, structural, recursive, and LLM-based,
-  each behind the existing `Chunker` interface so they plug into the same
-  pipeline as the fixed-size baseline.
-- **Eval-driven strategy selection** — compare chunking strategies on the same
-  data with real evals, surface the results, and let the user pick the strategy
-  (or default to the best-measured one) rather than hardcoding fixed-size.
+- **More chunking strategies** — structural, recursive, and LLM-based, each
+  behind the existing `Chunker` interface so they plug into the same pipeline as
+  the fixed-size and semantic strategies.
+- **Retrieval-quality strategy selection** — `/process` already compares every
+  strategy and keeps the best by a label-free coherence score; the stronger
+  signal is recall@k / MRR against labelled queries, which would replace (or
+  outrank) the structural score when a labelled set exists.
 - **Richer document & role categorization** — finer-grained document categories
   and user roles, so retrieval and the augmented prompt are scoped precisely to
   each user for more relevant, on-target answers, instead of a single flat

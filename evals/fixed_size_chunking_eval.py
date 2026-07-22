@@ -34,12 +34,17 @@ def _load_pages(path: Path = _DATA_PATH) -> list[str]:
     return text.split("\f")
 
 
-def chunk_metrics(chunks: list[str], chunk_size: int) -> dict[str, Any]:
-    """Summary metrics for a set of chunks produced at ``chunk_size``.
+def chunk_metrics(chunks: list[str], chunk_size: int | None = None) -> dict[str, Any]:
+    """Summary metrics for a set of chunks.
 
     Sizes are measured in words (whitespace-split), matching the chunking unit.
-    Strategy-agnostic: any chunker's output can be scored with this so future
-    strategies are measured on the same axes.
+    Strategy-agnostic: any chunker's output can be scored with this so strategies
+    are measured on the same axes.
+
+    ``chunk_size`` is the target window, where the strategy has one. Strategies
+    that pick their own boundaries (e.g. semantic) pass ``None``, and the two
+    size-relative metrics are reported as ``None`` rather than compared against a
+    target that does not exist.
     """
     lengths = [len(chunk.split()) for chunk in chunks]
     total_words = sum(lengths)
@@ -56,10 +61,16 @@ def chunk_metrics(chunks: list[str], chunk_size: int) -> dict[str, Any]:
         # Average fraction of a window that is actually filled. Fixed-size fills
         # every chunk but the last, so this trends toward 1.0 as the doc grows.
         "fill_ratio": (
-            round(total_words / (len(chunks) * chunk_size), 4) if chunks else 0.0
+            round(total_words / (len(chunks) * chunk_size), 4)
+            if chunks and chunk_size is not None
+            else None
         ),
         # Chunks shorter than the target window (only the tail, for fixed-size).
-        "undersized_chunks": sum(1 for length in lengths if length < chunk_size),
+        "undersized_chunks": (
+            sum(1 for length in lengths if length < chunk_size)
+            if chunk_size is not None
+            else None
+        ),
     }
 
 

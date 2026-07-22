@@ -5,11 +5,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from dtos.requests import (
-    ChunkingStrategy,
-    FixedSizeChunkingRequest,
-    PageExclusion,
-)
+from dtos.requests import FixedSizeChunkingRequest, PageExclusion
 from dtos.responses import DocType, StoredDocument
 from services.file_processing import FileProcessing
 
@@ -94,61 +90,100 @@ class TestExcludePages:
 
 
 class TestProcess:
-    def test_chunks_pdf_with_fixed_strategy(
+    """The caller picks no strategy: every one runs, is scored, and one wins."""
+
+    def test_runs_every_strategy_and_selects_one(
         self, make_pdf: Callable[[list[str]], bytes]
     ) -> None:
         response = service.process(
-            make_pdf(["Page one text.", "Page two text."]),
-            ChunkingStrategy.fixed,
+            make_pdf(["Cats purr. Cats nap.", "Trains run on rails. Trains are fast."]),
             "report.pdf",
             "analyst",
-            FixedSizeChunkingRequest(chunk_size=8),
         )
 
         assert response.processed is True
         assert response.doc_type is DocType.pdf
-        assert response.chunk_count == len(response.chunks)
-        assert response.chunk_count > 0
-        assert all(len(chunk.text.split()) <= 8 for chunk in response.chunks)
-        # Every chunk is embedded and tagged with a source page.
-        assert all(chunk.embedding for chunk in response.chunks)
-        assert all(chunk.page_number >= 1 for chunk in response.chunks)
-        # Nothing was persisted without a storage handle.
-        assert response.document_id is None
 
-    def test_persists_full_chunks_when_storage_is_given(
+        # Both implemented strategies were evaluated, exactly one selected.
+        assert {item.strategy for item in response.evaluations} == {
+            "fixed",
+            "semantic",
+        }
+        selected = [item for item in response.evaluations if item.selected]
+        assert len(selected) == 1
+        assert response.chunking_strategy == selected[0].strategy
+
+        # Evaluations are ordered best first, and the winner has the top score.
+        scores = [item.score for item in response.evaluations]
+        assert scores == sorted(scores, reverse=True)
+        assert selected[0] is response.evaluations[0]
+
+        # The returned chunks are the winner's.
+        assert response.chunk_count == len(response.chunks)
+        assert response.chunk_count == selected[0].chunk_count
+        assert all(chunk.embedding for chunk in response.chunks)
+
+    def test_stores_every_strategy_then_deletes_the_losers(
         self, make_pdf: Callable[[list[str]], bytes]
     ) -> None:
         storage = MagicMock()
         storage.insert_document.return_value = StoredDocument(
-            document_id=55, chunk_count=1
+            document_id=55, chunk_count=9
         )
 
         response = service.process(
-            make_pdf(["Page one text.", "Page two text."]),
-            ChunkingStrategy.fixed,
+            make_pdf(["Cats purr. Cats nap.", "Trains run on rails. Trains are fast."]),
             "report.pdf",
             "analyst",
-            FixedSizeChunkingRequest(chunk_size=100),
             storage=storage,
         )
 
         assert response.document_id == 55
-        name, access_role, chunks = storage.insert_document.call_args.args
+
+        # Every candidate is written against a single documents row...
+        name, access_role, chunks_by_strategy = storage.insert_document.call_args.args
         assert name == "report.pdf"
         assert access_role == "analyst"
-        # The full, embedded chunks are persisted (not the clipped response copies).
-        assert chunks and all(chunk.embedding for chunk in chunks)
+        assert set(chunks_by_strategy) == {"fixed", "semantic"}
+        assert all(
+            chunk.embedding
+            for chunks in chunks_by_strategy.values()
+            for chunk in chunks
+        )
+
+        # ...then everything but the winner is deleted, so one strategy remains.
+        storage.delete_chunks_except.assert_called_once_with(
+            55, response.chunking_strategy
+        )
+
+    def test_uses_the_given_chunk_size_for_the_fixed_candidate(
+        self, make_pdf: Callable[[list[str]], bytes]
+    ) -> None:
+        storage = MagicMock()
+        storage.insert_document.return_value = StoredDocument(
+            document_id=1, chunk_count=1
+        )
+
+        service.process(
+            make_pdf(["one two three four five six seven eight nine ten."]),
+            "report.pdf",
+            "analyst",
+            FixedSizeChunkingRequest(chunk_size=3),
+            storage=storage,
+        )
+
+        _, _, chunks_by_strategy = storage.insert_document.call_args.args
+        assert all(
+            len(chunk.text.split()) <= 3 for chunk in chunks_by_strategy["fixed"]
+        )
 
     def test_non_pdf_is_not_chunked_or_persisted(self) -> None:
         storage = MagicMock()
 
         response = service.process(
             b"just some plain text",
-            ChunkingStrategy.fixed,
             "notes.txt",
             "analyst",
-            FixedSizeChunkingRequest(chunk_size=8),
             filename="notes.txt",
             storage=storage,
         )
@@ -157,42 +192,35 @@ class TestProcess:
         assert response.chunks == []
         assert response.chunk_count == 0
         assert response.document_id is None
+        assert response.chunking_strategy is None
+        assert response.evaluations == []
         storage.insert_document.assert_not_called()
+        storage.delete_chunks_except.assert_not_called()
 
     def test_excluded_pages_are_left_out_of_chunks(
         self, make_pdf: Callable[[list[str]], bytes]
     ) -> None:
         response = service.process(
-            make_pdf(["KEEPME one", "DROPME two", "KEEPTOO three"]),
-            ChunkingStrategy.fixed,
+            make_pdf(["KEEPME one.", "DROPME two.", "KEEPTOO three."]),
             "report.pdf",
             "analyst",
-            FixedSizeChunkingRequest(chunk_size=100),
-            PageExclusion.model_validate({"exclude_pages": [2]}),
+            page_exclusion=PageExclusion.model_validate({"exclude_pages": [2]}),
         )
 
         joined = " ".join(chunk.text for chunk in response.chunks)
         assert "KEEPME" in joined
         assert "KEEPTOO" in joined
         assert "DROPME" not in joined
-        # The surviving text still starts on page 1.
-        assert response.chunks[0].page_number == 1
 
     def test_exclusion_preserves_page_numbers_of_later_pages(
         self, make_pdf: Callable[[list[str]], bytes]
     ) -> None:
         response = service.process(
-            make_pdf(["DROPME one", "KEEPME two"]),
-            ChunkingStrategy.fixed,
+            make_pdf(["DROPME one.", "KEEPME two."]),
             "report.pdf",
             "analyst",
-            FixedSizeChunkingRequest(chunk_size=100),
-            PageExclusion.model_validate({"exclude_pages": [1]}),
+            page_exclusion=PageExclusion.model_validate({"exclude_pages": [1]}),
         )
 
-        # Page 1 was excluded, so the only chunk must still report page 2.
-        assert [chunk.page_number for chunk in response.chunks] == [2]
-
-    def test_fixed_strategy_requires_fixed_size(self) -> None:
-        with pytest.raises(ValueError, match="fixed_size parameters are required"):
-            service.process(b"%PDF-1.4", ChunkingStrategy.fixed, "doc.pdf", "analyst")
+        # Page 1 was excluded, so every surviving chunk must report page 2.
+        assert {chunk.page_number for chunk in response.chunks} == {2}
