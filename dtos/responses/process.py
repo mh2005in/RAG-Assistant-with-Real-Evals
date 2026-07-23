@@ -4,8 +4,6 @@ from enum import Enum
 
 from pydantic import BaseModel, Field
 
-from dtos.responses.chunk import Chunk
-
 
 class DocType(str, Enum):
     """Detected document type of an uploaded file."""
@@ -46,13 +44,10 @@ class ProcessResponse(BaseModel):
     """Result of processing an uploaded file.
 
     The document is chunked with every implemented strategy, each is scored, and
-    only the winner's chunks are kept in the database. ``evaluations`` reports how
-    all of them did, and ``chunking_strategy`` names the one that remains.
-
-    ``chunks`` is populated only when the document could be chunked (currently
-    PDFs); each carries its per-page stats plus a clipped preview of its text and
-    embedding (see :meth:`Chunk.truncated`) to keep the response small. Otherwise
-    it is empty and ``chunk_count`` is 0.
+    only the winner's chunks are kept in the database. The response carries the
+    *evaluation*, not the chunks themselves: ``evaluations`` reports how every
+    strategy did (including its chunk count and mean size) and ``chunking_strategy``
+    names the one that remains. The stored chunks are read back via ``/retrieve``.
     """
 
     processed: bool
@@ -69,5 +64,3 @@ class ProcessResponse(BaseModel):
         default_factory=list,
         description="Every strategy's score, best first.",
     )
-    chunk_count: int = 0
-    chunks: list[Chunk] = Field(default_factory=list)

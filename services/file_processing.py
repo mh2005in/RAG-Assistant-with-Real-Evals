@@ -204,13 +204,12 @@ class FileProcessing:
             ).document_id
             storage.delete_chunks_except(document_id, winner)
 
-        kept = chunks_by_strategy[winner]
+        # The response reports the evaluation only; the stored chunks are read
+        # back through /retrieve, not echoed here.
         return ProcessResponse(
             processed=True,
             doc_type=doc_type,
             document_id=document_id,
             chunking_strategy=winner,
             evaluations=evaluations,
-            chunk_count=len(kept),
-            chunks=[chunk.truncated() for chunk in kept],
         )

@@ -17,6 +17,18 @@ from dtos.responses import RetrievedChunk, StoredDocument
 client = TestClient(app)
 
 
+def _stored_text(fake_storage: MagicMock) -> str:
+    """All chunk text a mocked storage was asked to persist.
+
+    The /process response reports the evaluation, not the chunks, so tests that
+    check *content* inspect what was stored instead.
+    """
+    _, _, chunks_by_strategy = fake_storage.insert_document.call_args.args
+    return " ".join(
+        chunk.text for chunks in chunks_by_strategy.values() for chunk in chunks
+    )
+
+
 @pytest.fixture(autouse=True)
 def fake_storage() -> Iterator[MagicMock]:
     """Override the storage dependency with a fake for every request."""
@@ -56,17 +68,13 @@ def test_pdf_is_chunked_scored_and_best_strategy_kept(
     body = response.json()
     assert body["processed"] is True
     assert body["doc_type"] == "pdf"
-    assert body["chunk_count"] == len(body["chunks"])
-    assert body["chunk_count"] > 0
-    # Each chunk is serialized with its stats and a non-empty embedding.
-    first = body["chunks"][0]
-    assert first["page_number"] >= 1
-    assert first["page_char_count"] == len(first["text"])
-    assert isinstance(first["embedding"], list) and first["embedding"]
+    # The response carries the evaluation, not the chunks themselves.
+    assert "chunks" not in body
     # Every strategy is evaluated and exactly one survives.
     assert {item["strategy"] for item in body["evaluations"]} == {"fixed", "semantic"}
     selected = [item for item in body["evaluations"] if item["selected"]]
     assert len(selected) == 1
+    assert selected[0]["chunk_count"] > 0
     assert body["chunking_strategy"] == selected[0]["strategy"]
     # The document was persisted and the losing strategies dropped.
     assert body["document_id"] == 123
@@ -80,7 +88,7 @@ def test_pdf_is_chunked_scored_and_best_strategy_kept(
 
 
 def test_excluded_pages_are_dropped(
-    make_pdf: Callable[[list[str]], bytes],
+    make_pdf: Callable[[list[str]], bytes], fake_storage: MagicMock
 ) -> None:
     pdf = make_pdf(["KEEPME", "DROPME"])
     response = client.post(
@@ -95,13 +103,13 @@ def test_excluded_pages_are_dropped(
     )
 
     assert response.status_code == 200
-    joined = "".join(chunk["text"] for chunk in response.json()["chunks"])
-    assert "KEEPME" in joined
-    assert "DROPME" not in joined
+    stored = _stored_text(fake_storage)
+    assert "KEEPME" in stored
+    assert "DROPME" not in stored
 
 
 def test_exclude_pages_accepts_mixed_numbers_and_ranges(
-    make_pdf: Callable[[list[str]], bytes],
+    make_pdf: Callable[[list[str]], bytes], fake_storage: MagicMock
 ) -> None:
     # Regression: the field takes a bare JSON array; a mix of a page number and
     # an inclusive range must be accepted (not "Input should be an object").
@@ -118,8 +126,11 @@ def test_exclude_pages_accepts_mixed_numbers_and_ranges(
     )
 
     assert response.status_code == 200
-    joined = "".join(chunk["text"] for chunk in response.json()["chunks"])
-    assert joined.strip() == "TWO"
+    stored = _stored_text(fake_storage)
+    assert "TWO" in stored
+    assert "ONE" not in stored
+    assert "THREE" not in stored
+    assert "FOUR" not in stored
 
 
 def test_malformed_exclude_pages_error_names_the_field(
@@ -161,9 +172,9 @@ def test_non_positive_chunk_size_is_rejected(
 
 
 def test_page_exclusion_is_optional_and_independent_of_strategy(
-    make_pdf: Callable[[list[str]], bytes],
+    make_pdf: Callable[[list[str]], bytes], fake_storage: MagicMock
 ) -> None:
-    # No page_exclusion field at all: everything is chunked.
+    # No exclude_pages field at all: everything is chunked.
     pdf = make_pdf(["KEEPME", "ALSOME"])
     response = client.post(
         "/process",
@@ -176,9 +187,9 @@ def test_page_exclusion_is_optional_and_independent_of_strategy(
     )
 
     assert response.status_code == 200
-    joined = "".join(chunk["text"] for chunk in response.json()["chunks"])
-    assert "KEEPME" in joined
-    assert "ALSOME" in joined
+    stored = _stored_text(fake_storage)
+    assert "KEEPME" in stored
+    assert "ALSOME" in stored
 
 
 def test_invalid_page_exclusion_is_rejected(
@@ -215,9 +226,9 @@ def test_non_pdf_is_detected_but_not_chunked_or_stored(
     assert response.status_code == 200
     body = response.json()
     assert body["doc_type"] == "unknown"
-    assert body["chunks"] == []
-    assert body["chunk_count"] == 0
+    assert body["evaluations"] == []
     assert body["document_id"] is None
+    assert body["chunking_strategy"] is None
     fake_storage.insert_document.assert_not_called()
 
 

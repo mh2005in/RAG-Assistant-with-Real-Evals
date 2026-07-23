@@ -6,10 +6,16 @@ from unittest.mock import MagicMock
 import pytest
 
 from dtos.requests import FixedSizeChunkingRequest, PageExclusion
-from dtos.responses import DocType, StoredDocument
+from dtos.responses import Chunk, DocType, StoredDocument
 from services.file_processing import FileProcessing
 
 service = FileProcessing()
+
+
+def _stored_chunks(storage: MagicMock, strategy: str = "fixed") -> list[Chunk]:
+    """The chunks a mocked storage was asked to persist for one strategy."""
+    _, _, chunks_by_strategy = storage.insert_document.call_args.args
+    return chunks_by_strategy[strategy]
 
 
 class TestDetectDocType:
@@ -117,11 +123,9 @@ class TestProcess:
         scores = [item.score for item in response.evaluations]
         assert scores == sorted(scores, reverse=True)
         assert selected[0] is response.evaluations[0]
-
-        # The returned chunks are the winner's.
-        assert response.chunk_count == len(response.chunks)
-        assert response.chunk_count == selected[0].chunk_count
-        assert all(chunk.embedding for chunk in response.chunks)
+        # The winner actually produced chunks; the response reports the count, not
+        # the chunks themselves.
+        assert selected[0].chunk_count > 0
 
     def test_stores_every_strategy_then_deletes_the_losers(
         self, make_pdf: Callable[[list[str]], bytes]
@@ -189,8 +193,6 @@ class TestProcess:
         )
 
         assert response.doc_type is DocType.unknown
-        assert response.chunks == []
-        assert response.chunk_count == 0
         assert response.document_id is None
         assert response.chunking_strategy is None
         assert response.evaluations == []
@@ -200,14 +202,21 @@ class TestProcess:
     def test_excluded_pages_are_left_out_of_chunks(
         self, make_pdf: Callable[[list[str]], bytes]
     ) -> None:
-        response = service.process(
+        storage = MagicMock()
+        storage.insert_document.return_value = StoredDocument(
+            document_id=1, chunk_count=1
+        )
+
+        service.process(
             make_pdf(["KEEPME one.", "DROPME two.", "KEEPTOO three."]),
             "report.pdf",
             "analyst",
             page_exclusion=PageExclusion.model_validate({"exclude_pages": [2]}),
+            storage=storage,
         )
 
-        joined = " ".join(chunk.text for chunk in response.chunks)
+        # The response no longer echoes chunks, so check what was stored.
+        joined = " ".join(chunk.text for chunk in _stored_chunks(storage))
         assert "KEEPME" in joined
         assert "KEEPTOO" in joined
         assert "DROPME" not in joined
@@ -215,12 +224,18 @@ class TestProcess:
     def test_exclusion_preserves_page_numbers_of_later_pages(
         self, make_pdf: Callable[[list[str]], bytes]
     ) -> None:
-        response = service.process(
+        storage = MagicMock()
+        storage.insert_document.return_value = StoredDocument(
+            document_id=1, chunk_count=1
+        )
+
+        service.process(
             make_pdf(["DROPME one.", "KEEPME two."]),
             "report.pdf",
             "analyst",
             page_exclusion=PageExclusion.model_validate({"exclude_pages": [1]}),
+            storage=storage,
         )
 
         # Page 1 was excluded, so every surviving chunk must report page 2.
-        assert {chunk.page_number for chunk in response.chunks} == {2}
+        assert {chunk.page_number for chunk in _stored_chunks(storage)} == {2}

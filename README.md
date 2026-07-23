@@ -104,8 +104,7 @@ curl -X POST http://localhost:8000/process \
 #        {"strategy": "semantic", "chunk_count": 12, "mean_chunk_words": 84.2,
 #         "cohesion": 0.67, "separation": 0.49, "score": 0.18, "selected": true},
 #        {"strategy": "fixed", ..., "score": 0.0, "selected": false}
-#      ],
-#      "chunk_count": 12, "chunks": [ ... ] }
+#      ] }
 ```
 
 **No `strategy` field.** Every implemented strategy chunks the document, all of
@@ -113,6 +112,10 @@ their chunks are stored against one `documents` row, each is scored, and the
 losers' chunks are deleted — so exactly one strategy survives per document.
 Re-processing the same document (same `name` + `access_role`) reuses that row and
 replaces its chunks, so the table never accumulates duplicates.
+
+The response reports the **evaluation only** — which strategy won and how each
+scored — not the chunks themselves. Read the stored chunks back through
+`/retrieve`.
 
 How the winner is chosen — a label-free, silhouette-style score over sentence
 embeddings:
