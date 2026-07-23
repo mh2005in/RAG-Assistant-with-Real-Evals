@@ -6,16 +6,31 @@ from unittest.mock import MagicMock
 import pytest
 
 from dtos.requests import FixedSizeChunkingRequest, PageExclusion
-from dtos.responses import Chunk, DocType, StoredDocument
+from dtos.responses import Chunk, DocType
 from services.file_processing import FileProcessing
 
 service = FileProcessing()
 
 
+def _fake_storage(document_id: int = 55) -> MagicMock:
+    """A storage mock whose ``create_document`` returns ``document_id``."""
+    storage = MagicMock()
+    storage.create_document.return_value = document_id
+    return storage
+
+
 def _stored_chunks(storage: MagicMock, strategy: str = "fixed") -> list[Chunk]:
-    """The chunks a mocked storage was asked to persist for one strategy."""
-    _, _, chunks_by_strategy = storage.insert_document.call_args.args
-    return chunks_by_strategy[strategy]
+    """The chunks a mocked storage was streamed for one strategy, in order.
+
+    The service persists one chunk at a time via ``insert_chunk(document_id,
+    strategy, index, chunk)``, so gather the ``chunk`` arg of each call tagged
+    with ``strategy``.
+    """
+    return [
+        call.args[3]
+        for call in storage.insert_chunk.call_args_list
+        if call.args[1] == strategy
+    ]
 
 
 class TestDetectDocType:
@@ -96,9 +111,9 @@ class TestExcludePages:
 
 
 class TestProcess:
-    """The caller picks no strategy: every one runs, is scored, and one wins."""
+    """The caller picks no strategy: every one runs and all are stored, unscored."""
 
-    def test_runs_every_strategy_and_selects_one(
+    def test_runs_every_strategy_and_reports_them(
         self, make_pdf: Callable[[list[str]], bytes]
     ) -> None:
         response = service.process(
@@ -110,30 +125,15 @@ class TestProcess:
         assert response.processed is True
         assert response.doc_type is DocType.pdf
 
-        # Both implemented strategies were evaluated, exactly one selected.
-        assert {item.strategy for item in response.evaluations} == {
-            "fixed",
-            "semantic",
-        }
-        selected = [item for item in response.evaluations if item.selected]
-        assert len(selected) == 1
-        assert response.chunking_strategy == selected[0].strategy
+        # Both implemented strategies were chunked and reported, each with a
+        # positive chunk count. No winner is chosen here (that is /evaluate's job).
+        assert {item.strategy for item in response.strategies} == {"fixed", "semantic"}
+        assert all(item.chunk_count > 0 for item in response.strategies)
 
-        # Evaluations are ordered best first, and the winner has the top score.
-        scores = [item.score for item in response.evaluations]
-        assert scores == sorted(scores, reverse=True)
-        assert selected[0] is response.evaluations[0]
-        # The winner actually produced chunks; the response reports the count, not
-        # the chunks themselves.
-        assert selected[0].chunk_count > 0
-
-    def test_stores_every_strategy_then_deletes_the_losers(
+    def test_streams_every_strategy_without_scoring_or_pruning(
         self, make_pdf: Callable[[list[str]], bytes]
     ) -> None:
-        storage = MagicMock()
-        storage.insert_document.return_value = StoredDocument(
-            document_id=55, chunk_count=9
-        )
+        storage = _fake_storage(document_id=55)
 
         response = service.process(
             make_pdf(["Cats purr. Cats nap.", "Trains run on rails. Trains are fast."]),
@@ -144,29 +144,54 @@ class TestProcess:
 
         assert response.document_id == 55
 
-        # Every candidate is written against a single documents row...
-        name, access_role, chunks_by_strategy = storage.insert_document.call_args.args
-        assert name == "report.pdf"
-        assert access_role == "analyst"
-        assert set(chunks_by_strategy) == {"fixed", "semantic"}
-        assert all(
-            chunk.embedding
-            for chunks in chunks_by_strategy.values()
-            for chunk in chunks
+        # The document row is created once, under the given name and role...
+        storage.create_document.assert_called_once_with("report.pdf", "analyst")
+        # ...then each chunk is streamed with insert_chunk, one call per chunk,
+        # every chunk carrying its embedding.
+        streamed = storage.insert_chunk.call_args_list
+        assert {call.args[1] for call in streamed} == {"fixed", "semantic"}
+        assert all(call.args[0] == 55 for call in streamed)
+        assert all(call.args[3].embedding for call in streamed)
+
+        # Nothing is scored or deleted here: pruning is deferred to /evaluate.
+        storage.delete_chunks_except.assert_not_called()
+        # The response counts match how many chunks were streamed per strategy.
+        streamed_counts = {"fixed": 0, "semantic": 0}
+        for call in streamed:
+            streamed_counts[call.args[1]] += 1
+        assert {
+            item.strategy: item.chunk_count for item in response.strategies
+        } == streamed_counts
+
+    def test_streams_chunks_numbered_from_zero_per_strategy(
+        self, make_pdf: Callable[[list[str]], bytes]
+    ) -> None:
+        storage = _fake_storage()
+
+        service.process(
+            make_pdf(
+                ["Cats purr. Cats nap. Cats groom.", "Trains run. Trains are fast."]
+            ),
+            "report.pdf",
+            "analyst",
+            FixedSizeChunkingRequest(chunk_size=3),
+            storage=storage,
         )
 
-        # ...then everything but the winner is deleted, so one strategy remains.
-        storage.delete_chunks_except.assert_called_once_with(
-            55, response.chunking_strategy
-        )
+        # Each strategy's chunk_index restarts at 0 and increments by one.
+        for strategy in ("fixed", "semantic"):
+            indices = [
+                call.args[2]
+                for call in storage.insert_chunk.call_args_list
+                if call.args[1] == strategy
+            ]
+            assert indices == list(range(len(indices)))
+            assert indices[0] == 0
 
     def test_uses_the_given_chunk_size_for_the_fixed_candidate(
         self, make_pdf: Callable[[list[str]], bytes]
     ) -> None:
-        storage = MagicMock()
-        storage.insert_document.return_value = StoredDocument(
-            document_id=1, chunk_count=1
-        )
+        storage = _fake_storage(document_id=1)
 
         service.process(
             make_pdf(["one two three four five six seven eight nine ten."]),
@@ -176,9 +201,8 @@ class TestProcess:
             storage=storage,
         )
 
-        _, _, chunks_by_strategy = storage.insert_document.call_args.args
         assert all(
-            len(chunk.text.split()) <= 3 for chunk in chunks_by_strategy["fixed"]
+            len(chunk.text.split()) <= 3 for chunk in _stored_chunks(storage, "fixed")
         )
 
     def test_non_pdf_is_not_chunked_or_persisted(self) -> None:
@@ -194,18 +218,15 @@ class TestProcess:
 
         assert response.doc_type is DocType.unknown
         assert response.document_id is None
-        assert response.chunking_strategy is None
-        assert response.evaluations == []
-        storage.insert_document.assert_not_called()
+        assert response.strategies == []
+        storage.create_document.assert_not_called()
+        storage.insert_chunk.assert_not_called()
         storage.delete_chunks_except.assert_not_called()
 
     def test_excluded_pages_are_left_out_of_chunks(
         self, make_pdf: Callable[[list[str]], bytes]
     ) -> None:
-        storage = MagicMock()
-        storage.insert_document.return_value = StoredDocument(
-            document_id=1, chunk_count=1
-        )
+        storage = _fake_storage(document_id=1)
 
         service.process(
             make_pdf(["KEEPME one.", "DROPME two.", "KEEPTOO three."]),
@@ -224,10 +245,7 @@ class TestProcess:
     def test_exclusion_preserves_page_numbers_of_later_pages(
         self, make_pdf: Callable[[list[str]], bytes]
     ) -> None:
-        storage = MagicMock()
-        storage.insert_document.return_value = StoredDocument(
-            document_id=1, chunk_count=1
-        )
+        storage = _fake_storage(document_id=1)
 
         service.process(
             make_pdf(["DROPME one.", "KEEPME two."]),

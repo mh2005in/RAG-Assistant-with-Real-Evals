@@ -20,11 +20,11 @@ def test_generate_passes_prompt_and_strips_response(
     fake_client.generate.return_value = SimpleNamespace(response="  the answer  ")
     monkeypatch.setattr(ollama_module, "Client", MagicMock(return_value=fake_client))
 
-    result = OllamaClient(model="gpt-oss:20b").generate("a prompt")
+    result = OllamaClient(model="gemma2:2b").generate("a prompt")
 
     assert result == "the answer"
     kwargs = fake_client.generate.call_args.kwargs
-    assert kwargs["model"] == "gpt-oss:20b"
+    assert kwargs["model"] == "gemma2:2b"
     assert kwargs["prompt"] == "a prompt"
     assert kwargs["stream"] is False
 
@@ -36,7 +36,7 @@ def test_generate_handles_missing_response_body(
     fake_client.generate.return_value = SimpleNamespace(response=None)
     monkeypatch.setattr(ollama_module, "Client", MagicMock(return_value=fake_client))
 
-    assert OllamaClient(model="gpt-oss:20b").generate("p") == ""
+    assert OllamaClient(model="gemma2:2b").generate("p") == ""
 
 
 def test_from_env_reads_model_and_base_url(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -61,4 +61,4 @@ def test_from_env_falls_back_to_defaults(monkeypatch: pytest.MonkeyPatch) -> Non
     monkeypatch.delenv("OLLAMA_BASE_URL", raising=False)
     monkeypatch.setattr(ollama_module, "Client", MagicMock())
 
-    assert OllamaClient.from_env()._model == "gpt-oss:20b"
+    assert OllamaClient.from_env()._model == "gemma2:2b"

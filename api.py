@@ -12,12 +12,19 @@ from pydantic import ValidationError
 
 from dtos.requests import (
     AnswerRequest,
+    EvaluateRequest,
     FixedSizeChunkingRequest,
     PageExclusion,
     RetrievalRequest,
 )
-from dtos.responses import AnswerResponse, ProcessResponse, RetrievalResponse
+from dtos.responses import (
+    AnswerResponse,
+    EvaluateResponse,
+    ProcessResponse,
+    RetrievalResponse,
+)
 from services.answering import Answering
+from services.evaluation import Evaluation
 from services.file_processing import FileProcessing
 from services.generation import LLMClient, OllamaClient
 from services.retrieval import Retrieval
@@ -26,6 +33,7 @@ from services.storage import PostgresStorage
 app = FastAPI(title="RAG Assistant — File Processing")
 
 file_processing = FileProcessing()
+evaluation = Evaluation()
 retrieval = Retrieval()
 answering = Answering()
 
@@ -91,12 +99,13 @@ async def process(
     ),
     storage: PostgresStorage = Depends(get_storage),
 ) -> ProcessResponse:
-    """Chunk a file every way, keep the best, and return the scores.
+    """Chunk a file every way, embed, and store them all.
 
     The caller does not choose a chunking strategy. Every implemented strategy
-    chunks the document, each is scored (cohesion vs separation), and only the
-    winner's chunks are kept in the database. The response reports every
-    strategy's evaluation and names the one that remains in ``chunking_strategy``.
+    chunks the document and all of their chunks are stored against one document
+    row — none is scored or dropped here. Call ``/evaluate`` to compare the stored
+    strategies and keep the best. The response reports which strategies were
+    stored and their chunk counts.
     """
     fixed_request = (
         FixedSizeChunkingRequest(chunk_size=chunk_size)
@@ -124,6 +133,31 @@ async def process(
         content_type=file.content_type,
         storage=storage,
     )
+
+
+@app.post("/evaluate", response_model=EvaluateResponse)
+async def evaluate(
+    request: EvaluateRequest,
+    storage: PostgresStorage = Depends(get_storage),
+) -> EvaluateResponse:
+    """Score a stored document's chunking strategies and keep the best.
+
+    ``/process`` stores every strategy without judging it; this scores them
+    (cohesion vs separation), keeps the winner's chunks and deletes the rest, so
+    the document ends up holding one strategy. Only a document matching the
+    request's ``access_role`` can be evaluated; a 404 is returned when it has no
+    readable chunks.
+    """
+    result = evaluation.evaluate(request, storage)
+    if not result.evaluations:
+        raise HTTPException(
+            status_code=404,
+            detail=(
+                f"no chunks found for document {request.document_id} "
+                f"with access role '{request.access_role}'"
+            ),
+        )
+    return result
 
 
 @app.post("/retrieve", response_model=RetrievalResponse)

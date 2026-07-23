@@ -1,8 +1,13 @@
 """File-processing service.
 
 Everything behind the ``/process`` endpoint: detect the document type, extract its
-text, chunk it with *every* implemented strategy, score them, and keep only the
-best. Route handlers stay thin and delegate here (see CLAUDE.md).
+text, chunk it with *every* implemented strategy, and embed and persist each chunk
+the moment it is produced (so a document's chunks never all sit in memory at once).
+Route handlers stay thin and delegate here (see CLAUDE.md).
+
+Scoring is a *separate* stage: this service stores every strategy without judging
+it, and ``/evaluate`` (see :class:`~services.evaluation.Evaluation`) compares them
+after the fact and keeps the best. So chunking never pays the cost of scoring.
 
 Chunking strategies stay behind the :class:`~services.chunking.Chunker` interface
 rather than becoming methods here, so they can be run and compared
@@ -12,12 +17,11 @@ apples-to-apples.
 import pymupdf
 
 from dtos.requests import ChunkingStrategy, FixedSizeChunkingRequest, PageExclusion
-from dtos.responses import Chunk, DocType, ProcessResponse, StrategyEvaluation
+from dtos.responses import Chunk, DocType, ProcessResponse, StoredStrategy
 from services.chunking import (
     Chunker,
     FixedSizeChunker,
     SemanticChunker,
-    score_chunks,
 )
 from services.embedding import Embedder, OllamaEmbedder
 from services.storage import PostgresStorage
@@ -108,42 +112,6 @@ class FileProcessing:
             ChunkingStrategy.semantic: SemanticChunker(self._get_embedder()),
         }
 
-    def _evaluate(
-        self, chunks_by_strategy: dict[str, list[Chunk]]
-    ) -> list[StrategyEvaluation]:
-        """Score each strategy's chunks, best first.
-
-        Scoring is label-free (cohesion vs separation, see
-        :func:`~services.chunking.score_chunks`), so it works on whatever document
-        was just uploaded. The highest score is marked ``selected``.
-        """
-        embedder = self._get_embedder()
-        scored: list[StrategyEvaluation] = []
-        for strategy, chunks in chunks_by_strategy.items():
-            texts = [chunk.text for chunk in chunks]
-            cohesion, separation, score = score_chunks(texts, embedder)
-            word_counts = [len(text.split()) for text in texts]
-            scored.append(
-                StrategyEvaluation(
-                    strategy=strategy,
-                    chunk_count=len(chunks),
-                    mean_chunk_words=(
-                        round(sum(word_counts) / len(word_counts), 2)
-                        if word_counts
-                        else 0.0
-                    ),
-                    cohesion=round(cohesion, 4),
-                    separation=round(separation, 4),
-                    score=round(score, 4),
-                    selected=False,
-                )
-            )
-
-        scored.sort(key=lambda evaluation: evaluation.score, reverse=True)
-        if scored:
-            scored[0] = scored[0].model_copy(update={"selected": True})
-        return scored
-
     def process(
         self,
         content: bytes,
@@ -155,17 +123,21 @@ class FileProcessing:
         content_type: str | None = None,
         storage: PostgresStorage | None = None,
     ) -> ProcessResponse:
-        """Chunk the document every way, keep the best, and report the scores.
+        """Chunk the document every way, embedding and storing each chunk as made.
 
         The caller does not pick a strategy. Every implemented strategy chunks the
-        same (page-excluded) text, all of their chunks are embedded and stored
-        against one ``documents`` row, then each is scored and the losers' chunks
-        are deleted — so exactly one strategy remains in the database.
+        same (page-excluded) text, and each chunk is embedded and persisted the
+        moment it is produced — so only one chunk is held in memory at a time,
+        instead of every strategy's chunks accumulating for a single batch write.
+        All strategies' chunks land against one ``documents`` row. No strategy is
+        scored or dropped here — that is ``/evaluate``'s job (see
+        :class:`~services.evaluation.Evaluation`), so the same document can be
+        scored later without re-chunking.
 
         ``fixed_size`` tunes the fixed-size candidate (defaulting to
         ``_DEFAULT_CHUNK_SIZE`` words); ``page_exclusion`` is strategy-agnostic and
-        is applied before any chunking. The response carries every strategy's
-        evaluation and names the winner in ``chunking_strategy``.
+        is applied before any chunking. The response reports which strategies were
+        stored and their chunk counts.
         """
         doc_type = self._detect_doc_type(
             content, filename=filename, content_type=content_type
@@ -178,38 +150,37 @@ class FileProcessing:
             chunk_size=_DEFAULT_CHUNK_SIZE
         )
 
-        # Chunk and embed with every strategy. Embedding happens per strategy
-        # because the chunk texts differ.
+        # Chunk, embed and persist one chunk at a time, for every strategy. Each
+        # chunk is stored the moment it is created and embedded, so only a single
+        # chunk (and its vector) is ever held in memory — rather than every
+        # strategy's chunks accumulating for one batch insert. None is dropped
+        # here; /evaluate scores the strategies and prunes the losers later.
         embedder = self._get_embedder()
-        chunks_by_strategy: dict[str, list[Chunk]] = {}
-        for strategy, chunker in self._candidates(fixed_size).items():
-            paged = chunker.chunk_with_pages(pages)
-            chunks = [Chunk.from_page(page, text) for page, text in paged]
-            if chunks:
-                chunks = embedder.embed_chunks(chunks)
-            chunks_by_strategy[strategy.value] = chunks
-
-        if not any(chunks_by_strategy.values()):
-            return ProcessResponse(processed=True, doc_type=doc_type)
-
-        evaluations = self._evaluate(chunks_by_strategy)
-        winner = next(item.strategy for item in evaluations if item.selected)
-
         document_id: int | None = None
-        if storage is not None:
-            # Store every candidate, then drop all but the winner, so the database
-            # ends up holding exactly one strategy's chunks.
-            document_id = storage.insert_document(
-                name, access_role, chunks_by_strategy
-            ).document_id
-            storage.delete_chunks_except(document_id, winner)
+        strategies: list[StoredStrategy] = []
+        for strategy, chunker in self._candidates(fixed_size).items():
+            chunk_count = 0
+            for page, text in chunker.chunk_with_pages(pages):
+                chunk = embedder.embed_chunks([Chunk.from_page(page, text)])[0]
+                if storage is not None:
+                    if document_id is None:
+                        # Created on the first chunk, which also clears any chunks
+                        # a previous run stored for this document.
+                        document_id = storage.create_document(name, access_role)
+                    storage.insert_chunk(
+                        document_id, strategy.value, chunk_count, chunk
+                    )
+                chunk_count += 1
+                # `chunk` (and its vector) is free to be collected next iteration.
+            strategies.append(
+                StoredStrategy(strategy=strategy.value, chunk_count=chunk_count)
+            )
 
-        # The response reports the evaluation only; the stored chunks are read
-        # back through /retrieve, not echoed here.
+        # The response reports what was stored; the chunks themselves are read
+        # back through /retrieve, and scored through /evaluate.
         return ProcessResponse(
             processed=True,
             doc_type=doc_type,
             document_id=document_id,
-            chunking_strategy=winner,
-            evaluations=evaluations,
+            strategies=strategies,
         )

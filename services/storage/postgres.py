@@ -16,7 +16,7 @@ import psycopg
 from pgvector import Vector
 from pgvector.psycopg import register_vector
 
-from dtos.responses import Chunk, RetrievedChunk, StoredDocument
+from dtos.responses import Chunk, RetrievedChunk
 
 _CONN_ENV_VAR = "DATABASE_URL"
 
@@ -50,6 +50,18 @@ _DELETE_LOSING_CHUNKS = """
     DELETE FROM chunks
     WHERE document_id = %s
       AND chunking_strategy <> %s
+"""
+# Read back a document's chunk texts, tagged with the strategy that produced them
+# and kept in chunk order, so evaluation can score every stored strategy. Joined
+# to documents and filtered by access_role so a caller can only evaluate a
+# document its role may read (the same access rule retrieval enforces).
+_SELECT_CHUNK_TEXTS = """
+    SELECT c.chunking_strategy, c.text
+    FROM chunks c
+    JOIN documents d ON d.id = c.document_id
+    WHERE c.document_id = %s
+      AND d.access_role = %s
+    ORDER BY c.chunking_strategy, c.chunk_index
 """
 # Nearest-neighbour search by cosine distance (``<=>``), which matches the HNSW
 # index in db/schema.sql. Restricted to the caller's access role and to chunks
@@ -94,6 +106,13 @@ class PostgresStorage:
 
         Registers the pgvector type adapters on the connection so ``Vector``
         values can be passed straight through as ``vector`` parameters.
+
+        The connection runs in **autocommit** mode: a bare read (e.g.
+        :meth:`read_chunk_texts_by_strategy`) then leaves no transaction dangling,
+        so a following write's :meth:`~psycopg.Connection.transaction` block is a
+        real top-level transaction that commits — rather than a nested savepoint
+        that the connection close would roll back. Each write method still wraps
+        its statements in ``transaction()``, so multi-statement writes stay atomic.
         """
         conn_str = conn_str or os.environ.get(_CONN_ENV_VAR)
         if not conn_str:
@@ -101,30 +120,22 @@ class PostgresStorage:
                 f"no database connection string provided; pass one or set "
                 f"${_CONN_ENV_VAR}"
             )
-        connection = psycopg.connect(conn_str)
+        connection = psycopg.connect(conn_str, autocommit=True)
         register_vector(connection)
         return cls(connection)
 
-    def insert_document(
-        self,
-        name: str,
-        access_role: str,
-        chunks_by_strategy: dict[str, list[Chunk]],
-    ) -> StoredDocument:
-        """Persist one document and every strategy's chunks in one transaction.
+    def create_document(self, name: str, access_role: str) -> int:
+        """Get-or-create the document row and clear any chunks it already held.
 
-        The document is identified by ``(name, access_role)``: processing the same
-        document again reuses its row — left untouched, since nothing about it
-        changes — and replaces its chunks, so the table never accumulates
-        duplicate entries for one document. Each strategy's chunks are
-        attached to it, tagged with the strategy that produced them and numbered
-        from 0 *within that strategy*. Storing the candidates side by side is what
-        lets them be compared before one is kept (see
-        :meth:`delete_chunks_except`).
+        Returns the document id. The row is identified by ``(name, access_role)``:
+        processing the same document again reuses its row — left untouched, since
+        nothing about it changes — and its old chunks are removed, so re-processing
+        replaces a document's chunks rather than piling up duplicates. Chunks are
+        then added one at a time with :meth:`insert_chunk`, so a document's chunks
+        never all need to be held in memory at once.
 
-        A chunk's ``embedding`` is stored as a ``vector`` when present and left
-        NULL when it has not been embedded yet. The whole write is atomic: on any
-        failure nothing is committed.
+        The get-or-create and the clear are one atomic step: they commit together
+        or not at all.
         """
         with self._conn.transaction(), self._conn.cursor() as cur:
             cur.execute(_INSERT_DOCUMENT_IF_NEW, (name, access_role))
@@ -140,15 +151,30 @@ class PostgresStorage:
             # Replace whatever this document held before.
             cur.execute(_DELETE_DOCUMENT_CHUNKS, (document_id,))
 
-            rows = [
-                self._chunk_row(document_id, strategy, index, chunk)
-                for strategy, chunks in chunks_by_strategy.items()
-                for index, chunk in enumerate(chunks)
-            ]
-            if rows:
-                cur.executemany(_INSERT_CHUNK, rows)
+        return document_id
 
-        return StoredDocument(document_id=document_id, chunk_count=len(rows))
+    def insert_chunk(
+        self,
+        document_id: int,
+        chunking_strategy: str,
+        chunk_index: int,
+        chunk: Chunk,
+    ) -> None:
+        """Persist one chunk as soon as it is produced and embedded.
+
+        Writing each chunk immediately — rather than collecting a strategy's (or
+        the whole document's) chunks for a single batch insert — keeps only one
+        chunk and its vector in memory at a time. ``chunk_index`` numbers the
+        chunk 0, 1, ... *within its strategy*, so several strategies' chunks live
+        side by side under one document (see the table's UNIQUE constraint). The
+        ``embedding`` is stored as a ``vector`` when present and NULL when the
+        chunk has not been embedded yet.
+        """
+        with self._conn.transaction(), self._conn.cursor() as cur:
+            cur.execute(
+                _INSERT_CHUNK,
+                self._chunk_row(document_id, chunking_strategy, chunk_index, chunk),
+            )
 
     def delete_chunks_except(self, document_id: int, keep_strategy: str) -> int:
         """Delete the document's chunks from every strategy but ``keep_strategy``.
@@ -159,6 +185,26 @@ class PostgresStorage:
         with self._conn.transaction(), self._conn.cursor() as cur:
             cur.execute(_DELETE_LOSING_CHUNKS, (document_id, keep_strategy))
             return cur.rowcount
+
+    def read_chunk_texts_by_strategy(
+        self, document_id: int, access_role: str
+    ) -> dict[str, list[str]]:
+        """Return the document's chunk texts grouped by chunking strategy.
+
+        Each strategy maps to its chunk texts in chunk order, so evaluation can
+        score every stored strategy on equal footing. Only a document with
+        ``access_role`` is readable (the role-based access filter); an unknown
+        document, or one under a different role, yields an empty mapping. Only the
+        text is read back — scoring embeds sentences afresh, so the stored
+        chunk-level embeddings are not needed here.
+        """
+        with self._conn.cursor() as cur:
+            cur.execute(_SELECT_CHUNK_TEXTS, (document_id, access_role))
+            rows = cur.fetchall()
+        by_strategy: dict[str, list[str]] = {}
+        for strategy, text in rows:
+            by_strategy.setdefault(strategy, []).append(text)
+        return by_strategy
 
     def search_chunks(
         self,
