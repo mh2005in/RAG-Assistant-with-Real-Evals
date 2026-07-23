@@ -140,13 +140,14 @@ async def evaluate(
     request: EvaluateRequest,
     storage: PostgresStorage = Depends(get_storage),
 ) -> EvaluateResponse:
-    """Score a stored document's chunking strategies and keep the best.
+    """Score a stored document's chunking strategies on a labelled Q&A set.
 
-    ``/process`` stores every strategy without judging it; this scores them
-    (cohesion vs separation), keeps the winner's chunks and deletes the rest, so
-    the document ends up holding one strategy. Only a document matching the
-    request's ``access_role`` can be evaluated; a 404 is returned when it has no
-    readable chunks.
+    ``/process`` stores every strategy without judging it; this retrieves against
+    each strategy for the caller's ``qa_pairs`` (question/expected-answer pairs),
+    ranks the strategies by how well their retrievals match the expected answers,
+    keeps the winner's chunks and deletes the rest, so the document ends up
+    holding one strategy. Only a document matching the request's ``access_role``
+    can be evaluated; a 404 is returned when it has no readable chunks.
     """
     result = evaluation.evaluate(request, storage)
     if not result.evaluations:

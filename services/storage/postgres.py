@@ -67,7 +67,9 @@ _SELECT_CHUNK_TEXTS = """
 # index in db/schema.sql. Restricted to the caller's access role and to chunks
 # that have actually been embedded. The query vector is bound once as a named
 # parameter and referenced in both the SELECT and the ORDER BY. A NULL
-# ``chunking_strategy`` searches every strategy; setting it compares one.
+# ``chunking_strategy`` searches every strategy; setting it compares one. A NULL
+# ``document_id`` searches every document; setting it confines the search to one
+# (used by the evaluation eval, which compares strategies of a single document).
 _SEARCH_CHUNKS = """
     SELECT
         c.document_id,
@@ -84,6 +86,8 @@ _SEARCH_CHUNKS = """
       -- Cast required: Postgres cannot infer a bare NULL parameter's type here.
       AND (%(chunking_strategy)s::text IS NULL
            OR c.chunking_strategy = %(chunking_strategy)s::text)
+      AND (%(document_id)s::bigint IS NULL
+           OR c.document_id = %(document_id)s::bigint)
     ORDER BY c.embedding <=> %(query)s
     LIMIT %(top_k)s
 """
@@ -212,6 +216,7 @@ class PostgresStorage:
         access_role: str,
         top_k: int,
         chunking_strategy: str | None = None,
+        document_id: int | None = None,
     ) -> list[RetrievedChunk]:
         """Return the ``top_k`` chunks most similar to ``query_embedding``.
 
@@ -222,7 +227,8 @@ class PostgresStorage:
         the stored vectors (the embedding model must match the one used to store).
 
         ``chunking_strategy`` restricts the search to chunks produced by that
-        strategy; ``None`` searches every strategy.
+        strategy; ``None`` searches every strategy. ``document_id`` restricts the
+        search to a single document; ``None`` searches every document.
         """
         with self._conn.cursor() as cur:
             cur.execute(
@@ -232,6 +238,7 @@ class PostgresStorage:
                     "access_role": access_role,
                     "top_k": top_k,
                     "chunking_strategy": chunking_strategy,
+                    "document_id": document_id,
                 },
             )
             rows = cur.fetchall()
