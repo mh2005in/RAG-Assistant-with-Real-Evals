@@ -353,8 +353,10 @@ Planned but **not yet implemented**:
   retrieval eval (answer-match similarity over caller-supplied Q&A). A natural next
   step is standard rank-aware metrics (recall@k / MRR / nDCG) over the same labelled
   set. An in-loop **LLM judge** for answer correctness is deliberately **out of
-  scope**: the scorer stays open-source and cost-free by using local embedding
-  similarity, and the Q&A pairs are authored externally (e.g. by an LLM offline).
+  scope** for the online endpoint: the scorer stays open-source and cost-free by
+  using local embedding similarity, and the Q&A pairs are authored externally (e.g.
+  by an LLM offline). A fully-local, offline LLM-judge eval is sketched separately —
+  see [Proposal: LLM-judge evaluation with RAGAS](#proposal-llm-judge-evaluation-with-ragas).
 - **Richer document & role categorization** — finer-grained document categories
   and user roles, so retrieval and the augmented prompt are scoped precisely to
   each user for more relevant, on-target answers, instead of a single flat
@@ -364,3 +366,87 @@ Planned but **not yet implemented**:
 - **More evals:** embedding/retrieval quality (recall@k / MRR) and
   answer-faithfulness for generation.
 - **Validation:** LLM-based output validation alongside the Pydantic schemas.
+
+## Proposal: LLM-judge evaluation with RAGAS
+
+> **Status: proposal — not implemented.** This section sketches an *optional*,
+> deeper evaluation that would run **alongside** (not replace) the current
+> embedding-similarity `/evaluate`. Nothing here exists in the code yet.
+
+### Why consider it
+
+The current `/evaluate` ranks chunking strategies by how closely retrieved chunks
+match a caller-supplied expected answer, using only local embeddings — cheap,
+reproducible, and LLM-free (see [Using the API](#using-the-api)). What it *cannot*
+see is **answer quality**: whether an answer *generated* from the retrieved
+context is faithful (grounded, no hallucination) and actually relevant to the
+question. [RAGAS](https://docs.ragas.io) is the standard framework for exactly
+those RAG-quality metrics, and it can run **fully locally** against Ollama, so it
+fits the project's open-source, no-external-API constraint.
+
+### What RAGAS would add
+
+RAGAS scores a dataset of `question` / `retrieved_contexts` / generated `response`
+/ `reference` (ground-truth answer). The metrics relevant here:
+
+| Metric | Needs an LLM? | What it measures |
+| --- | --- | --- |
+| `SemanticSimilarity` | No (embeddings) | Generated answer vs reference answer — close to today's metric, but on the *answer*, not the context |
+| `NonLLMContextRecall` / `…Precision` | No | Retrieved contexts vs **reference contexts** (gold chunk labels) |
+| `LLMContextPrecision` / `ContextRecall` | Yes | Whether retrieved contexts are relevant to / support the answer |
+| `Faithfulness` | Yes | Is the generated answer grounded in the retrieved context (no hallucination)? |
+| `ResponseRelevancy` | Yes | Does the generated answer actually address the question? |
+| `FactualCorrectness` | Yes | Generated answer vs reference, claim by claim |
+
+The LLM-judged rows (faithfulness, relevancy, context precision/recall) are the
+ones that add signal beyond today's method — and they need an LLM judge, plus a
+**generated answer** the current endpoint deliberately never produces.
+
+### The gap vs today's design
+
+- **A generation step is required.** RAGAS's answer-quality metrics score a
+  `response`. Today's `/evaluate` retrieves but never generates. The proposal must
+  add, per (strategy, question), a generate-from-context step (the same
+  Ollama model `/answer` already uses).
+- **Non-LLM RAGAS mostly overlaps what we have.** `NonLLMContext*` needs
+  **reference contexts** (labelled gold chunks) we don't collect; `SemanticSimilarity`
+  needs a generated answer. So the no-LLM subset adds little without new labels.
+
+### Proposed design
+
+Keep it **out of the online request path** — RAGAS is async, LLM-heavy, and
+non-deterministic, which does not belong in a `/evaluate` HTTP call. Instead add a
+reproducible offline eval, consistent with the existing `evals/` artifacts:
+
+- **`evals/ragas_chunking_eval.py`** — for each stored strategy: retrieve per
+  question (reuse `PostgresStorage.search_chunks`, confined to the document +
+  strategy), generate an answer from the retrieved context (reuse
+  `services/generation`), assemble a RAGAS dataset, and score it.
+- **Fully local wiring** — point RAGAS at Ollama for both judge and embeddings via
+  `langchain_ollama` + RAGAS's `LangchainLLMWrapper` / `LangchainEmbeddingsWrapper`.
+  No external API, no per-call cloud cost.
+- **Output** — a regenerable `evals/results/ragas_chunking.json` (per-strategy
+  metric table + winner), the same "scores as artifacts" pattern the other evals
+  follow. Optionally, a strategy winner could feed the same prune step `/evaluate`
+  uses today.
+
+### Trade-offs and open questions
+
+- **Dependency weight** — RAGAS pulls in `ragas`, `langchain`, `datasets`, etc.:
+  a large jump from the current lean stack. Likely an optional dependency group so
+  the core app/tests stay slim.
+- **Judge quality vs cost** — a small local judge (`gemma2:2b`) is a weak, noisier
+  grader than a frontier model; a larger local model (e.g. `gpt-oss:20b`) is better
+  but heavy on this hardware. Metric reliability is bounded by the judge.
+- **Reproducibility** — LLM-judged metrics vary run to run; pin the model + a low
+  temperature and treat the numbers as indicative, not exact (unlike the current
+  deterministic embedding score).
+- **Latency** — generation + multiple LLM-judge calls per (strategy, question) make
+  this minutes-scale, another reason it stays an offline eval, not an endpoint.
+
+### Decision needed before building
+
+Whether to (a) run RAGAS **fully local** (open-source, no external $, but real
+compute + a weak local judge), or (b) allow an external judge API for stronger,
+more reliable metrics at per-call cost. The project's current stance favours (a);
+this proposal assumes (a) unless decided otherwise.
