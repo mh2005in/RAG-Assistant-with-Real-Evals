@@ -23,8 +23,12 @@ flowchart LR
       U["PDF upload"] --> EX["Extract text<br/>(PyMuPDF)"]
       EX --> CH["Chunk every strategy<br/>(fixed-size, semantic)"]
       CH --> EM1["Embed<br/>(Ollama)"]
-      EM1 --> SC["Score + keep the best<br/>(cohesion vs separation)"]
-      SC --> ST[("PostgreSQL + pgvector<br/>documents, chunks")]
+      EM1 --> ST[("PostgreSQL + pgvector<br/>documents, chunks")]
+    end
+    subgraph eval["POST /evaluate"]
+      direction TB
+      RD["Read stored chunks"] --> SC["Score each strategy<br/>(cohesion vs separation)"]
+      SC --> PR["Keep the best,<br/>delete the rest"]
     end
     subgraph ask["POST /retrieve and /answer"]
       direction TB
@@ -34,13 +38,19 @@ flowchart LR
       AUG --> GEN["Generate<br/>(Ollama)"]
       GEN --> A["Answer + sources"]
     end
+    ST -.-> RD
+    PR -.-> ST
     ST -.-> SR
 ```
 
 - **`POST /process`** — detect + extract a PDF (PyMuPDF), chunk it with **every**
-  strategy, embed and store them all, score each one, and keep only the winner's
-  chunks. You don't pick a strategy: the response reports every strategy's score
-  and names the one that remains.
+  strategy, and embed and store them all. You don't pick a strategy, and none is
+  scored or dropped here: the response reports which strategies were stored and
+  their chunk counts.
+- **`POST /evaluate`** — score a stored document's strategies (label-free cohesion
+  vs separation), keep the winner's chunks and delete the losers, so the document
+  ends up holding exactly one strategy. Scoring is a **separate stage** from
+  chunking, so a document can be re-evaluated without re-processing.
 - **`POST /retrieve`** — embed a query and run a pgvector cosine similarity
   search over the stored chunks, filtered by access role. Returns the closest
   chunks with similarity scores.
@@ -59,7 +69,7 @@ Each stage sits behind a small interface (`Chunker`, `Embedder`, `LLMClient`,
 | Web framework | FastAPI + Uvicorn |
 | Validation | Pydantic v2 (all request/response DTOs) |
 | PDF extraction | PyMuPDF |
-| Embeddings & generation | Ollama (`nomic-embed-text` 768-dim, `gpt-oss:20b`) |
+| Embeddings & generation | Ollama (`nomic-embed-text` 768-dim, `gemma2:2b`) |
 | Vector store | PostgreSQL 17 + pgvector (HNSW, cosine) |
 | DB driver | psycopg 3 + pgvector adapter |
 | Tests / types / lint | pytest, mypy, Ruff |
@@ -75,10 +85,11 @@ cp .env.example .env             # local-dev defaults (rag/rag); not production 
 docker compose up -d --build     # builds the app image, starts db + ollama, pulls the models
 ```
 
-On first start this pulls the Ollama models (`gpt-oss:20b` ~13 GB and
-`nomic-embed-text` ~274 MB), so give it a while on the first run. `gpt-oss:20b`
-needs ~16 GB of RAM/VRAM; on a smaller machine set `OLLAMA_MODEL=gemma2:2b`
-(~1.6 GB) in `.env`. When it's up:
+On first start this pulls the Ollama models (`gemma2:2b` ~1.6 GB and
+`nomic-embed-text` ~274 MB), so give it a moment on the first run. `gemma2:2b`
+runs comfortably on modest hardware (CPU-only is fine). For higher-quality answers
+on a bigger machine, set `OLLAMA_MODEL=gpt-oss:20b` (~13 GB, needs ~16 GB of
+RAM/VRAM) in `.env`. When it's up:
 
 - App: <http://localhost:8000> — interactive API docs at
   <http://localhost:8000/docs>
@@ -101,6 +112,38 @@ curl -X POST http://localhost:8000/process \
   -F "chunk_size=200" \
   -F 'exclude_pages=[1, {"start": 10, "end": 12}]'
 # -> { "processed": true, "doc_type": "pdf", "document_id": 1,
+#      "strategies": [                           # what was stored, unscored
+#        {"strategy": "fixed", "chunk_count": 18},
+#        {"strategy": "semantic", "chunk_count": 12}
+#      ] }
+```
+
+**No `strategy` field.** Every implemented strategy chunks the document and all of
+their chunks are stored against one `documents` row — none is scored or dropped
+here. Re-processing the same document (same `name` + `access_role`) reuses that
+row and replaces its chunks, so the table never accumulates duplicates.
+
+The response reports **what was stored** — the strategies and their chunk counts —
+not the chunks themselves. Read the stored chunks back through `/retrieve`, and
+compare the strategies with `/evaluate`.
+
+The remaining inputs:
+
+- **`chunk_size`** — optional positive integer, tuning only the **fixed-size**
+  candidate (default 200 words). Other strategies choose their own boundaries.
+- **`exclude_pages`** — optional and **strategy-agnostic**: a JSON **array** of
+  page numbers and/or inclusive ranges, e.g. `[1, {"start": 10, "end": 12}]`.
+  Applied to the extracted pages before any chunking, so it works the same for
+  every strategy. Excluded pages don't shift the numbering of the pages that
+  remain.
+
+**2. Evaluate the stored strategies and keep the best:**
+
+```bash
+curl -X POST http://localhost:8000/evaluate \
+  -H "Content-Type: application/json" \
+  -d '{"document_id": 1, "access_role": "analyst"}'
+# -> { "document_id": 1,
 #      "chunking_strategy": "semantic",          # the one that remains
 #      "evaluations": [                          # best first
 #        {"strategy": "semantic", "chunk_count": 12, "mean_chunk_words": 84.2,
@@ -109,15 +152,12 @@ curl -X POST http://localhost:8000/process \
 #      ] }
 ```
 
-**No `strategy` field.** Every implemented strategy chunks the document, all of
-their chunks are stored against one `documents` row, each is scored, and the
-losers' chunks are deleted — so exactly one strategy survives per document.
-Re-processing the same document (same `name` + `access_role`) reuses that row and
-replaces its chunks, so the table never accumulates duplicates.
-
-The response reports the **evaluation only** — which strategy won and how each
-scored — not the chunks themselves. Read the stored chunks back through
-`/retrieve`.
+Scoring is a **separate stage** from chunking: `/process` never judges the
+strategies it stores, so chunking stays cheap and a document can be re-evaluated
+(e.g. with a different metric) without re-chunking. `/evaluate` reads the stored
+chunks back, scores every strategy, keeps the winner's chunks and **deletes the
+rest** — so the document ends up holding exactly one strategy. Only a document
+matching the request's `access_role` is evaluated (a 404 means no readable chunks).
 
 How the winner is chosen — a label-free, silhouette-style score over sentence
 embeddings:
@@ -135,17 +175,7 @@ embeddings:
 > runs on whatever you upload — but a retrieval eval against labelled queries is
 > the stronger signal, and is on the [Roadmap](#roadmap).
 
-The remaining inputs:
-
-- **`chunk_size`** — optional positive integer, tuning only the **fixed-size**
-  candidate (default 200 words). Other strategies choose their own boundaries.
-- **`exclude_pages`** — optional and **strategy-agnostic**: a JSON **array** of
-  page numbers and/or inclusive ranges, e.g. `[1, {"start": 10, "end": 12}]`.
-  Applied to the extracted pages before any chunking, so it works the same for
-  every strategy. Excluded pages don't shift the numbering of the pages that
-  remain.
-
-**2. Retrieve relevant chunks:**
+**3. Retrieve relevant chunks:**
 
 ```bash
 curl -X POST http://localhost:8000/retrieve \
@@ -159,7 +189,7 @@ Both `/retrieve` and `/answer` accept an optional `"chunking_strategy": "semanti
 to search only the chunks produced by that strategy — which is how the same
 document, chunked several ways, gets compared.
 
-**3. Ask a question** (retrieve + augmented generation):
+**4. Ask a question** (retrieve + augmented generation):
 
 ```bash
 curl -X POST http://localhost:8000/answer \
@@ -183,7 +213,7 @@ and `ollama` service configs); override defaults through `.env` or the shell. Se
 | `POSTGRES_USER` / `POSTGRES_PASSWORD` / `POSTGRES_DB` | `rag` / `rag` / `rag` | Postgres container |
 | `POSTGRES_PORT` | `5435` | host port for Postgres (container listens on 5432) |
 | `APP_PORT` | `8000` | host port for the app |
-| `OLLAMA_MODEL` | `gpt-oss:20b` | generation model (`/answer`) |
+| `OLLAMA_MODEL` | `gemma2:2b` | generation model (`/answer`) |
 | `OLLAMA_EMBED_MODEL` | `nomic-embed-text` | embedding model (`/process`, `/retrieve`) |
 | `OLLAMA_GPU_COUNT` | `0` | GPUs given to Ollama: `0` = CPU, `all` = every NVIDIA GPU, `N` = N GPUs |
 | `OLLAMA_PORT` | `11434` | host port for Ollama |
@@ -211,22 +241,23 @@ on the host. Confirm which one is in use with `docker exec rag-ollama ollama ps`
 and read the `PROCESSOR` column.
 
 **GPU only helps if the model fits in VRAM.** Ollama offloads as many layers as
-fit and runs the rest on CPU. The default `gpt-oss:20b` needs ~16 GB, so on a
-small card (e.g. a 4 GB GTX 1650) almost nothing offloads and it runs on CPU
-either way — `OLLAMA_GPU_COUNT=all` makes little difference until the model fits.
-A model that fits (e.g. `gemma2:2b` on that same card) is meaningfully faster on
-CUDA. Check what actually happened with `docker exec rag-ollama ollama ps` and
+fit and runs the rest on CPU. The default `gemma2:2b` (~1.6 GB) fits even on a
+small card (e.g. a 4 GB GTX 1650) and is meaningfully faster on CUDA there. A big
+model like `gpt-oss:20b` (~16 GB) barely offloads on such a card and runs on CPU
+either way, so `OLLAMA_GPU_COUNT=all` makes little difference until it fits.
+Check what actually happened with `docker exec rag-ollama ollama ps` and
 read the `PROCESSOR` column (`100% CPU`, `NN%/MM% CPU/GPU`, or `100% GPU`).
 
 ## Project layout
 
 ```
-api.py                     FastAPI app: /process, /retrieve, /answer (+ DI wiring)
+api.py                     FastAPI app: /process, /evaluate, /retrieve, /answer (+ DI wiring)
 dtos/
-  requests/                request models (chunking, retrieval, answer)
-  responses/               response models (process, chunk, retrieval, answer, storage)
+  requests/                request models (chunking, evaluate, retrieval, answer)
+  responses/               response models (process, evaluate, chunk, retrieval, answer, storage)
 services/
   file_processing.py       /process: detect → extract → chunk → embed → store
+  evaluation.py            /evaluate: read chunks → score strategies → keep the best
   retrieval.py             /retrieve: embed query → similarity search
   answering.py             /answer: retrieve → augment prompt → generate
   chunking/                Chunker interface + fixed-size and semantic strategies
@@ -253,9 +284,10 @@ Dockerfile                 app image (uv, uvicorn)
 
   `chunking_strategy` records which strategy produced each chunk. During
   `/process` every strategy's chunks are written against the same `documents`
-  row (numbered from 0 *per strategy*), scored, and then all but the winner are
-  deleted — so a stored document ends up holding exactly one strategy's chunks.
-  `/retrieve` and `/answer` can still filter by it.
+  row (numbered from 0 *per strategy*) and all are kept; `/evaluate` later scores
+  them and deletes all but the winner — so an evaluated document ends up holding
+  exactly one strategy's chunks. `/retrieve` and `/answer` can filter by it, and
+  before evaluation it distinguishes the strategies stored side by side.
 
 ## Development
 
@@ -296,8 +328,8 @@ Planned but **not yet implemented**:
 - **More chunking strategies** — structural, recursive, and LLM-based, each
   behind the existing `Chunker` interface so they plug into the same pipeline as
   the fixed-size and semantic strategies.
-- **Retrieval-quality strategy selection** — `/process` already compares every
-  strategy and keeps the best by a label-free coherence score; the stronger
+- **Retrieval-quality strategy selection** — `/evaluate` already compares every
+  stored strategy and keeps the best by a label-free coherence score; the stronger
   signal is recall@k / MRR against labelled queries, which would replace (or
   outrank) the structural score when a labelled set exists.
 - **Richer document & role categorization** — finer-grained document categories

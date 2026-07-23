@@ -12,42 +12,29 @@ class DocType(str, Enum):
     unknown = "unknown"
 
 
-class StrategyEvaluation(BaseModel):
-    """How one chunking strategy scored on the uploaded document.
+class StoredStrategy(BaseModel):
+    """One chunking strategy's chunks that were stored for a document.
 
-    ``score`` is ``cohesion - separation``; higher is better. The strategy with
-    the highest score is kept and the rest are deleted (see ``selected``).
+    ``/process`` stores every strategy side by side without judging them; each
+    entry here reports how many chunks a strategy contributed. Which one is
+    "best" is decided later by ``/evaluate``, not at processing time.
     """
 
-    strategy: str = Field(..., description="Chunking strategy that was evaluated.")
-    chunk_count: int = Field(..., ge=0, description="Chunks the strategy produced.")
-    mean_chunk_words: float = Field(
-        ..., ge=0, description="Average chunk length in words."
-    )
-    cohesion: float = Field(
-        ...,
-        description="Mean similarity between sentences inside a chunk; higher is better.",
-    )
-    separation: float = Field(
-        ...,
-        description="Mean similarity between neighbouring chunks; lower is better.",
-    )
-    score: float = Field(
-        ..., description="cohesion - separation; the strategy with the highest wins."
-    )
-    selected: bool = Field(
-        ..., description="Whether this strategy was kept (the others are deleted)."
+    strategy: str = Field(..., description="Chunking strategy that was stored.")
+    chunk_count: int = Field(
+        ..., ge=0, description="Chunks this strategy contributed to the document."
     )
 
 
 class ProcessResponse(BaseModel):
     """Result of processing an uploaded file.
 
-    The document is chunked with every implemented strategy, each is scored, and
-    only the winner's chunks are kept in the database. The response carries the
-    *evaluation*, not the chunks themselves: ``evaluations`` reports how every
-    strategy did (including its chunk count and mean size) and ``chunking_strategy``
-    names the one that remains. The stored chunks are read back via ``/retrieve``.
+    The document is chunked with *every* implemented strategy and all of their
+    chunks are stored against one ``documents`` row — no strategy is scored or
+    dropped here. Scoring is a separate stage: call ``/evaluate`` to compare the
+    stored strategies and keep the best. The response reports which strategies
+    were stored (``strategies``) and their chunk counts, not the chunks
+    themselves; the stored chunks are read back via ``/retrieve``.
     """
 
     processed: bool
@@ -56,11 +43,7 @@ class ProcessResponse(BaseModel):
         default=None,
         description="Primary key of the stored document, or null if nothing was stored.",
     )
-    chunking_strategy: str | None = Field(
-        default=None,
-        description="The winning strategy, whose chunks remain in the database.",
-    )
-    evaluations: list[StrategyEvaluation] = Field(
+    strategies: list[StoredStrategy] = Field(
         default_factory=list,
-        description="Every strategy's score, best first.",
+        description="Every strategy stored for the document, with its chunk count.",
     )

@@ -12,20 +12,20 @@ import pytest
 from fastapi.testclient import TestClient
 
 from api import app, get_llm, get_storage
-from dtos.responses import RetrievedChunk, StoredDocument
+from dtos.responses import RetrievedChunk
 
 client = TestClient(app)
 
 
 def _stored_text(fake_storage: MagicMock) -> str:
-    """All chunk text a mocked storage was asked to persist.
+    """All chunk text a mocked storage was streamed.
 
-    The /process response reports the evaluation, not the chunks, so tests that
-    check *content* inspect what was stored instead.
+    The /process response reports which strategies were stored, not the chunks, so
+    tests that check *content* inspect what was streamed via ``insert_chunk``
+    (called once per chunk as ``insert_chunk(document_id, strategy, index, chunk)``).
     """
-    _, _, chunks_by_strategy = fake_storage.insert_document.call_args.args
     return " ".join(
-        chunk.text for chunks in chunks_by_strategy.values() for chunk in chunks
+        call.args[3].text for call in fake_storage.insert_chunk.call_args_list
     )
 
 
@@ -33,9 +33,7 @@ def _stored_text(fake_storage: MagicMock) -> str:
 def fake_storage() -> Iterator[MagicMock]:
     """Override the storage dependency with a fake for every request."""
     storage = MagicMock()
-    storage.insert_document.return_value = StoredDocument(
-        document_id=123, chunk_count=1
-    )
+    storage.create_document.return_value = 123
     app.dependency_overrides[get_storage] = lambda: storage
     yield storage
     app.dependency_overrides.pop(get_storage, None)
@@ -50,7 +48,7 @@ def fake_llm() -> Iterator[MagicMock]:
     app.dependency_overrides.pop(get_llm, None)
 
 
-def test_pdf_is_chunked_scored_and_best_strategy_kept(
+def test_pdf_is_chunked_and_every_strategy_stored(
     make_pdf: Callable[[list[str]], bytes], fake_storage: MagicMock
 ) -> None:
     pdf = make_pdf(["Page one text.", "Page two text."])
@@ -68,23 +66,20 @@ def test_pdf_is_chunked_scored_and_best_strategy_kept(
     body = response.json()
     assert body["processed"] is True
     assert body["doc_type"] == "pdf"
-    # The response carries the evaluation, not the chunks themselves.
+    # The response reports which strategies were stored, not the chunks themselves.
     assert "chunks" not in body
-    # Every strategy is evaluated and exactly one survives.
-    assert {item["strategy"] for item in body["evaluations"]} == {"fixed", "semantic"}
-    selected = [item for item in body["evaluations"] if item["selected"]]
-    assert len(selected) == 1
-    assert selected[0]["chunk_count"] > 0
-    assert body["chunking_strategy"] == selected[0]["strategy"]
-    # The document was persisted and the losing strategies dropped.
+    # Every strategy is chunked and reported; no scoring/winner at process time.
+    assert {item["strategy"] for item in body["strategies"]} == {"fixed", "semantic"}
+    assert all(item["chunk_count"] > 0 for item in body["strategies"])
+    # The document row was created once, and each strategy's chunks streamed in;
+    # nothing was pruned.
     assert body["document_id"] == 123
-    name, access_role, chunks_by_strategy = fake_storage.insert_document.call_args.args
-    assert name == "report.pdf"
-    assert access_role == "analyst"
-    assert set(chunks_by_strategy) == {"fixed", "semantic"}
-    fake_storage.delete_chunks_except.assert_called_once_with(
-        123, body["chunking_strategy"]
-    )
+    fake_storage.create_document.assert_called_once_with("report.pdf", "analyst")
+    assert {call.args[1] for call in fake_storage.insert_chunk.call_args_list} == {
+        "fixed",
+        "semantic",
+    }
+    fake_storage.delete_chunks_except.assert_not_called()
 
 
 def test_excluded_pages_are_dropped(
@@ -226,10 +221,10 @@ def test_non_pdf_is_detected_but_not_chunked_or_stored(
     assert response.status_code == 200
     body = response.json()
     assert body["doc_type"] == "unknown"
-    assert body["evaluations"] == []
+    assert body["strategies"] == []
     assert body["document_id"] is None
-    assert body["chunking_strategy"] is None
-    fake_storage.insert_document.assert_not_called()
+    fake_storage.create_document.assert_not_called()
+    fake_storage.insert_chunk.assert_not_called()
 
 
 def test_chunk_size_is_optional(
@@ -244,7 +239,10 @@ def test_chunk_size_is_optional(
     )
 
     assert response.status_code == 200
-    assert response.json()["chunking_strategy"] in {"fixed", "semantic"}
+    assert {item["strategy"] for item in response.json()["strategies"]} == {
+        "fixed",
+        "semantic",
+    }
 
 
 def test_name_and_access_role_are_required(
@@ -258,6 +256,64 @@ def test_name_and_access_role_are_required(
     )
 
     assert response.status_code == 422
+
+
+def test_evaluate_scores_strategies_and_prunes_losers(
+    fake_storage: MagicMock,
+) -> None:
+    # Two strategies stored for the document; /evaluate scores and keeps one.
+    fake_storage.read_chunk_texts_by_strategy.return_value = {
+        "fixed": ["Cats purr. Cats nap.", "Trains run. Trains are fast."],
+        "semantic": ["Cats purr. Cats nap.", "Trains run. Trains are fast."],
+    }
+
+    response = client.post(
+        "/evaluate",
+        json={"document_id": 55, "access_role": "analyst"},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["document_id"] == 55
+    # Every stored strategy is scored, exactly one selected, best first.
+    assert {item["strategy"] for item in body["evaluations"]} == {"fixed", "semantic"}
+    selected = [item for item in body["evaluations"] if item["selected"]]
+    assert len(selected) == 1
+    assert body["chunking_strategy"] == selected[0]["strategy"]
+    scores = [item["score"] for item in body["evaluations"]]
+    assert scores == sorted(scores, reverse=True)
+    # The document was read back under the request's role, and losers pruned.
+    fake_storage.read_chunk_texts_by_strategy.assert_called_once_with(55, "analyst")
+    fake_storage.delete_chunks_except.assert_called_once_with(
+        55, body["chunking_strategy"]
+    )
+
+
+def test_evaluate_404_when_document_has_no_readable_chunks(
+    fake_storage: MagicMock,
+) -> None:
+    # An unknown document, or one under a different role, reads back nothing.
+    fake_storage.read_chunk_texts_by_strategy.return_value = {}
+
+    response = client.post(
+        "/evaluate",
+        json={"document_id": 999, "access_role": "analyst"},
+    )
+
+    assert response.status_code == 404
+    fake_storage.delete_chunks_except.assert_not_called()
+
+
+def test_evaluate_requires_document_id_and_access_role() -> None:
+    assert client.post("/evaluate", json={"access_role": "analyst"}).status_code == 422
+    assert client.post("/evaluate", json={"document_id": 1}).status_code == 422
+    # document_id must be a positive id.
+    assert (
+        client.post(
+            "/evaluate", json={"document_id": 0, "access_role": "analyst"}
+        ).status_code
+        == 422
+    )
 
 
 def test_retrieve_returns_matching_chunks(fake_storage: MagicMock) -> None:

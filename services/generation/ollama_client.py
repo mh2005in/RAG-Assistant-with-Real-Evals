@@ -13,7 +13,7 @@ from ollama import Client
 _BASE_URL_ENV_VAR = "OLLAMA_BASE_URL"
 _MODEL_ENV_VAR = "OLLAMA_MODEL"
 _DEFAULT_BASE_URL = "http://localhost:11434"
-_DEFAULT_MODEL = "gpt-oss:20b"
+_DEFAULT_MODEL = "gemma2:2b"
 
 # Low temperature keeps answers close to the provided context (less invention).
 _TEMPERATURE = 0.2
@@ -30,7 +30,7 @@ class OllamaClient:
     def from_env(cls) -> "OllamaClient":
         """Build a client from ``$OLLAMA_BASE_URL`` and ``$OLLAMA_MODEL``.
 
-        Both fall back to the docker-compose defaults (localhost:11434, gpt-oss:20b).
+        Both fall back to the docker-compose defaults (localhost:11434, gemma2:2b).
         """
         return cls(
             model=os.environ.get(_MODEL_ENV_VAR, _DEFAULT_MODEL),
