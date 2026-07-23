@@ -59,7 +59,7 @@ Each stage sits behind a small interface (`Chunker`, `Embedder`, `LLMClient`,
 | Web framework | FastAPI + Uvicorn |
 | Validation | Pydantic v2 (all request/response DTOs) |
 | PDF extraction | PyMuPDF |
-| Embeddings & generation | Ollama (`nomic-embed-text` 768-dim, `gemma2:2b`) |
+| Embeddings & generation | Ollama (`nomic-embed-text` 768-dim, `gpt-oss:20b`) |
 | Vector store | PostgreSQL 17 + pgvector (HNSW, cosine) |
 | DB driver | psycopg 3 + pgvector adapter |
 | Tests / types / lint | pytest, mypy, Ruff |
@@ -75,8 +75,10 @@ cp .env.example .env             # local-dev defaults (rag/rag); not production 
 docker compose up -d --build     # builds the app image, starts db + ollama, pulls the models
 ```
 
-On first start this pulls the Ollama models (`gemma2:2b` ~1.6 GB and
-`nomic-embed-text` ~274 MB), so give it a few minutes. When it's up:
+On first start this pulls the Ollama models (`gpt-oss:20b` ~13 GB and
+`nomic-embed-text` ~274 MB), so give it a while on the first run. `gpt-oss:20b`
+needs ~16 GB of RAM/VRAM; on a smaller machine set `OLLAMA_MODEL=gemma2:2b`
+(~1.6 GB) in `.env`. When it's up:
 
 - App: <http://localhost:8000> — interactive API docs at
   <http://localhost:8000/docs>
@@ -181,7 +183,7 @@ and `ollama` service configs); override defaults through `.env` or the shell. Se
 | `POSTGRES_USER` / `POSTGRES_PASSWORD` / `POSTGRES_DB` | `rag` / `rag` / `rag` | Postgres container |
 | `POSTGRES_PORT` | `5435` | host port for Postgres (container listens on 5432) |
 | `APP_PORT` | `8000` | host port for the app |
-| `OLLAMA_MODEL` | `gemma2:2b` | generation model (`/answer`) |
+| `OLLAMA_MODEL` | `gpt-oss:20b` | generation model (`/answer`) |
 | `OLLAMA_EMBED_MODEL` | `nomic-embed-text` | embedding model (`/process`, `/retrieve`) |
 | `OLLAMA_GPU_COUNT` | `0` | GPUs given to Ollama: `0` = CPU, `all` = every NVIDIA GPU, `N` = N GPUs |
 | `OLLAMA_PORT` | `11434` | host port for Ollama |
@@ -208,18 +210,13 @@ Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/lates
 on the host. Confirm which one is in use with `docker exec rag-ollama ollama ps`
 and read the `PROCESSOR` column.
 
-**GPU is not automatically a win on a small card.** The models must fit in VRAM
-together or Ollama reloads them on every switch. Measured on a 4 GB GTX 1650 with
-the defaults (`gemma2:2b` + `nomic-embed-text`, which together exceed 4 GB):
-
-| | generation | embedding (8 texts, warm) |
-| --- | --- | --- |
-| CPU | 10.9 tok/s | ~112 ms compute |
-| CUDA | **17.1 tok/s** | ~201 ms compute + **~1.3 s reload** |
-
-Generation gets ~1.6x faster, but embedding gets *slower* because the two models
-thrash VRAM. On a card that fits both (≥8 GB), or with a smaller generation model
-such as `llama3.2:1b`, both stages benefit.
+**GPU only helps if the model fits in VRAM.** Ollama offloads as many layers as
+fit and runs the rest on CPU. The default `gpt-oss:20b` needs ~16 GB, so on a
+small card (e.g. a 4 GB GTX 1650) almost nothing offloads and it runs on CPU
+either way — `OLLAMA_GPU_COUNT=all` makes little difference until the model fits.
+A model that fits (e.g. `gemma2:2b` on that same card) is meaningfully faster on
+CUDA. Check what actually happened with `docker exec rag-ollama ollama ps` and
+read the `PROCESSOR` column (`100% CPU`, `NN%/MM% CPU/GPU`, or `100% GPU`).
 
 ## Project layout
 
