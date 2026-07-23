@@ -12,7 +12,6 @@ from pydantic import ValidationError
 
 from dtos.requests import (
     AnswerRequest,
-    ChunkingStrategy,
     FixedSizeChunkingRequest,
     PageExclusion,
     RetrievalRequest,
@@ -70,7 +69,6 @@ def get_llm() -> LLMClient:
 @app.post("/process", response_model=ProcessResponse)
 async def process(
     file: UploadFile = File(...),
-    strategy: ChunkingStrategy = Form(...),
     name: str = Form(..., description="Name to store the document under."),
     access_role: str = Form(
         ..., description="Role permitted to access the stored document."
@@ -79,8 +77,8 @@ async def process(
         None,
         gt=0,
         description=(
-            "Words per chunk for the fixed-size strategy (e.g. 512). "
-            "Required when strategy is 'fixed'."
+            "Words per chunk for the fixed-size candidate (default 200). "
+            "Other strategies pick their own boundaries."
         ),
     ),
     exclude_pages: str | None = Form(
@@ -88,27 +86,23 @@ async def process(
         description=(
             "JSON array of pages to skip: page numbers and/or inclusive ranges "
             '(e.g. [1, {"start": 10, "end": 12}]). '
-            "Optional, and applies to any chunking strategy."
+            "Optional, and applies to every chunking strategy."
         ),
     ),
     storage: PostgresStorage = Depends(get_storage),
 ) -> ProcessResponse:
-    """Accept a file and chunking strategy; chunk, embed, and store it.
+    """Chunk a file every way, keep the best, and return the scores.
 
-    When ``strategy`` is ``fixed``, ``chunk_size`` (words per chunk) is required.
-    ``exclude_pages`` is an optional JSON array of page numbers/ranges and applies
-    to any strategy. Documents that produce chunks are persisted under
-    ``name``/``access_role`` and their ``document_id`` is returned.
+    The caller does not choose a chunking strategy. Every implemented strategy
+    chunks the document, each is scored (cohesion vs separation), and only the
+    winner's chunks are kept in the database. The response reports every
+    strategy's evaluation and names the one that remains in ``chunking_strategy``.
     """
-    fixed_request: FixedSizeChunkingRequest | None = None
-    if strategy is ChunkingStrategy.fixed:
-        if chunk_size is None:
-            raise HTTPException(
-                status_code=422,
-                detail="chunk_size is required when strategy is 'fixed'.",
-            )
-        # chunk_size is already validated as a positive int by the Form above.
-        fixed_request = FixedSizeChunkingRequest(chunk_size=chunk_size)
+    fixed_request = (
+        FixedSizeChunkingRequest(chunk_size=chunk_size)
+        if chunk_size is not None
+        else None
+    )
 
     exclusion: PageExclusion | None = None
     if exclude_pages is not None:
@@ -122,7 +116,6 @@ async def process(
     content = await file.read()
     return file_processing.process(
         content,
-        strategy,
         name,
         access_role,
         fixed_request,

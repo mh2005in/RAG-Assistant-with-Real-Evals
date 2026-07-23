@@ -55,9 +55,14 @@ services:
       retries: 5
 
   ollama:
-    # Local LLM server for the augmentation (RAG generation) step. Runs on CPU by
-    # default so it works everywhere; uncomment the deploy block below to use an
-    # NVIDIA GPU (needs the NVIDIA Container Toolkit).
+    # Ollama runs both the embedding and generation models, so it is the only
+    # service doing tensor maths — the app itself has no GPU dependency.
+    #
+    # CPU vs CUDA is switched with $OLLAMA_GPU_COUNT (see .env.example):
+    #   0 (default) -> no devices reserved, Ollama runs on CPU, works everywhere
+    #   all         -> every NVIDIA GPU is passed through and Ollama uses CUDA
+    #   1, 2, ...   -> that many GPUs
+    # Anything other than 0 needs the NVIDIA Container Toolkit on the host.
     image: ollama/ollama:latest
     container_name: rag-ollama
     ports:
@@ -70,13 +75,13 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
-    # deploy:
-    #   resources:
-    #     reservations:
-    #       devices:
-    #         - driver: nvidia
-    #           count: all
-    #           capabilities: [gpu]
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: ${OLLAMA_GPU_COUNT:-0}
+              capabilities: [gpu]
 
   # One-shot helper: waits for the server, pulls the generation model and the
   # embedding model, then exits. `pull` is idempotent, so on later `up`s it just

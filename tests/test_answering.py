@@ -15,6 +15,7 @@ def _chunk(text: str, page: int = 1) -> RetrievedChunk:
     return RetrievedChunk(
         document_id=1,
         document_name="doc.pdf",
+        chunking_strategy="fixed",
         chunk_index=0,
         page_number=page,
         text=text,
@@ -48,9 +49,10 @@ def test_answer_builds_augmented_prompt_and_returns_sources() -> None:
         "Mitochondria make ATP.",
     ]
     # Retrieval was scoped to the requested role and top_k.
-    _, access_role, top_k = storage.search_chunks.call_args.args
+    _, access_role, top_k, strategy = storage.search_chunks.call_args.args
     assert access_role == "student"
     assert top_k == 2
+    assert strategy is None
 
 
 def test_answer_with_no_context_skips_the_model() -> None:

@@ -13,7 +13,12 @@ class RetrievedChunk(BaseModel):
 
     document_id: int = Field(..., description="Id of the document the chunk is from.")
     document_name: str = Field(..., description="Name of the source document.")
-    chunk_index: int = Field(..., description="0-based position within the document.")
+    chunking_strategy: str = Field(
+        ..., description="Chunking strategy that produced this chunk."
+    )
+    chunk_index: int = Field(
+        ..., description="0-based position within the document, for this strategy."
+    )
     page_number: int = Field(..., ge=1, description="1-based source page number.")
     text: str = Field(..., description="The chunk's text.")
     score: float = Field(

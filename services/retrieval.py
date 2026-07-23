@@ -40,8 +40,11 @@ class Retrieval:
         the stored chunks were embedded with (same vector dimension).
         """
         query_embedding = self._get_embedder().embed([request.query])[0]
+        strategy = (
+            request.chunking_strategy.value if request.chunking_strategy else None
+        )
         results = storage.search_chunks(
-            query_embedding, request.access_role, request.top_k
+            query_embedding, request.access_role, request.top_k, strategy
         )
         return RetrievalResponse(
             query=request.query, count=len(results), results=results

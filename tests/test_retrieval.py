@@ -15,6 +15,7 @@ def _retrieved(text: str, score: float) -> RetrievedChunk:
     return RetrievedChunk(
         document_id=1,
         document_name="doc.pdf",
+        chunking_strategy="fixed",
         chunk_index=0,
         page_number=1,
         text=text,
@@ -31,10 +32,11 @@ def test_retrieve_embeds_query_then_searches() -> None:
 
     # The query text is embedded (fake embedder -> [len(text), 0.0]) and the
     # vector, role, and top_k are passed straight to the storage search.
-    embedding, access_role, top_k = storage.search_chunks.call_args.args
+    embedding, access_role, top_k, strategy = storage.search_chunks.call_args.args
     assert embedding == [float(len("find alpha")), 0.0]
     assert access_role == "analyst"
     assert top_k == 3
+    assert strategy is None
 
     assert response.query == "find alpha"
     assert response.count == 1

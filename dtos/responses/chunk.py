@@ -13,13 +13,6 @@ from pydantic import BaseModel, Field
 # encode time; this keeps chunk-building cheap and dependency-free.
 _CHARS_PER_TOKEN = 4
 
-# Response-size caps. Full page text and 384-dim embeddings make a /process
-# response enormous, so the response carries only a preview (see ``truncated``).
-# The descriptive stats still describe the whole page and vector, so nothing is
-# misrepresented — only the bulky payloads are clipped.
-_TEXT_PREVIEW_CHARS = 200
-_EMBEDDING_PREVIEW_DIMS = 8
-
 
 class Chunk(BaseModel):
     """A page's text plus descriptive stats and, once embedded, its vector."""
@@ -57,23 +50,4 @@ class Chunk(BaseModel):
             page_sentence_count_raw=len(sentences),
             page_token_count=len(text) / _CHARS_PER_TOKEN,
             text=text,
-        )
-
-    def truncated(
-        self,
-        *,
-        text_chars: int = _TEXT_PREVIEW_CHARS,
-        embedding_dims: int = _EMBEDDING_PREVIEW_DIMS,
-    ) -> "Chunk":
-        """Return a copy with ``text`` and ``embedding`` clipped for the response.
-
-        Only the bulky payloads are shortened — to ``text_chars`` characters and
-        ``embedding_dims`` dimensions. ``page_number`` and every ``page_*`` stat
-        are left untouched, so they still describe the full page and vector.
-        """
-        return self.model_copy(
-            update={
-                "text": self.text[:text_chars],
-                "embedding": self.embedding[:embedding_dims],
-            }
         )

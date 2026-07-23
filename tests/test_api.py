@@ -17,6 +17,18 @@ from dtos.responses import RetrievedChunk, StoredDocument
 client = TestClient(app)
 
 
+def _stored_text(fake_storage: MagicMock) -> str:
+    """All chunk text a mocked storage was asked to persist.
+
+    The /process response reports the evaluation, not the chunks, so tests that
+    check *content* inspect what was stored instead.
+    """
+    _, _, chunks_by_strategy = fake_storage.insert_document.call_args.args
+    return " ".join(
+        chunk.text for chunks in chunks_by_strategy.values() for chunk in chunks
+    )
+
+
 @pytest.fixture(autouse=True)
 def fake_storage() -> Iterator[MagicMock]:
     """Override the storage dependency with a fake for every request."""
@@ -38,14 +50,13 @@ def fake_llm() -> Iterator[MagicMock]:
     app.dependency_overrides.pop(get_llm, None)
 
 
-def test_pdf_is_chunked_and_stored_with_fixed_strategy(
+def test_pdf_is_chunked_scored_and_best_strategy_kept(
     make_pdf: Callable[[list[str]], bytes], fake_storage: MagicMock
 ) -> None:
     pdf = make_pdf(["Page one text.", "Page two text."])
     response = client.post(
         "/process",
         data={
-            "strategy": "fixed",
             "name": "report.pdf",
             "access_role": "analyst",
             "chunk_size": "8",
@@ -57,30 +68,32 @@ def test_pdf_is_chunked_and_stored_with_fixed_strategy(
     body = response.json()
     assert body["processed"] is True
     assert body["doc_type"] == "pdf"
-    assert body["chunk_count"] == len(body["chunks"])
-    assert body["chunk_count"] > 0
-    # Fixed-size chunks are capped at chunk_size words.
-    assert all(len(chunk["text"].split()) <= 8 for chunk in body["chunks"])
-    # Each chunk is serialized with its stats and a non-empty embedding.
-    first = body["chunks"][0]
-    assert first["page_number"] >= 1
-    assert first["page_char_count"] == len(first["text"])
-    assert isinstance(first["embedding"], list) and first["embedding"]
-    # The document was persisted and its id returned.
+    # The response carries the evaluation, not the chunks themselves.
+    assert "chunks" not in body
+    # Every strategy is evaluated and exactly one survives.
+    assert {item["strategy"] for item in body["evaluations"]} == {"fixed", "semantic"}
+    selected = [item for item in body["evaluations"] if item["selected"]]
+    assert len(selected) == 1
+    assert selected[0]["chunk_count"] > 0
+    assert body["chunking_strategy"] == selected[0]["strategy"]
+    # The document was persisted and the losing strategies dropped.
     assert body["document_id"] == 123
-    name, access_role, _ = fake_storage.insert_document.call_args.args
+    name, access_role, chunks_by_strategy = fake_storage.insert_document.call_args.args
     assert name == "report.pdf"
     assert access_role == "analyst"
+    assert set(chunks_by_strategy) == {"fixed", "semantic"}
+    fake_storage.delete_chunks_except.assert_called_once_with(
+        123, body["chunking_strategy"]
+    )
 
 
 def test_excluded_pages_are_dropped(
-    make_pdf: Callable[[list[str]], bytes],
+    make_pdf: Callable[[list[str]], bytes], fake_storage: MagicMock
 ) -> None:
     pdf = make_pdf(["KEEPME", "DROPME"])
     response = client.post(
         "/process",
         data={
-            "strategy": "fixed",
             "name": "report.pdf",
             "access_role": "analyst",
             "chunk_size": "1000",
@@ -90,13 +103,13 @@ def test_excluded_pages_are_dropped(
     )
 
     assert response.status_code == 200
-    joined = "".join(chunk["text"] for chunk in response.json()["chunks"])
-    assert "KEEPME" in joined
-    assert "DROPME" not in joined
+    stored = _stored_text(fake_storage)
+    assert "KEEPME" in stored
+    assert "DROPME" not in stored
 
 
 def test_exclude_pages_accepts_mixed_numbers_and_ranges(
-    make_pdf: Callable[[list[str]], bytes],
+    make_pdf: Callable[[list[str]], bytes], fake_storage: MagicMock
 ) -> None:
     # Regression: the field takes a bare JSON array; a mix of a page number and
     # an inclusive range must be accepted (not "Input should be an object").
@@ -104,7 +117,6 @@ def test_exclude_pages_accepts_mixed_numbers_and_ranges(
     response = client.post(
         "/process",
         data={
-            "strategy": "fixed",
             "name": "report.pdf",
             "access_role": "analyst",
             "chunk_size": "1000",
@@ -114,8 +126,11 @@ def test_exclude_pages_accepts_mixed_numbers_and_ranges(
     )
 
     assert response.status_code == 200
-    joined = "".join(chunk["text"] for chunk in response.json()["chunks"])
-    assert joined.strip() == "TWO"
+    stored = _stored_text(fake_storage)
+    assert "TWO" in stored
+    assert "ONE" not in stored
+    assert "THREE" not in stored
+    assert "FOUR" not in stored
 
 
 def test_malformed_exclude_pages_error_names_the_field(
@@ -127,7 +142,6 @@ def test_malformed_exclude_pages_error_names_the_field(
     response = client.post(
         "/process",
         data={
-            "strategy": "fixed",
             "name": "report.pdf",
             "access_role": "analyst",
             "chunk_size": "100",
@@ -147,7 +161,6 @@ def test_non_positive_chunk_size_is_rejected(
     response = client.post(
         "/process",
         data={
-            "strategy": "fixed",
             "name": "report.pdf",
             "access_role": "analyst",
             "chunk_size": "0",
@@ -159,14 +172,13 @@ def test_non_positive_chunk_size_is_rejected(
 
 
 def test_page_exclusion_is_optional_and_independent_of_strategy(
-    make_pdf: Callable[[list[str]], bytes],
+    make_pdf: Callable[[list[str]], bytes], fake_storage: MagicMock
 ) -> None:
-    # No page_exclusion field at all: everything is chunked.
+    # No exclude_pages field at all: everything is chunked.
     pdf = make_pdf(["KEEPME", "ALSOME"])
     response = client.post(
         "/process",
         data={
-            "strategy": "fixed",
             "name": "report.pdf",
             "access_role": "analyst",
             "chunk_size": "1000",
@@ -175,9 +187,9 @@ def test_page_exclusion_is_optional_and_independent_of_strategy(
     )
 
     assert response.status_code == 200
-    joined = "".join(chunk["text"] for chunk in response.json()["chunks"])
-    assert "KEEPME" in joined
-    assert "ALSOME" in joined
+    stored = _stored_text(fake_storage)
+    assert "KEEPME" in stored
+    assert "ALSOME" in stored
 
 
 def test_invalid_page_exclusion_is_rejected(
@@ -187,7 +199,6 @@ def test_invalid_page_exclusion_is_rejected(
     response = client.post(
         "/process",
         data={
-            "strategy": "fixed",
             "name": "report.pdf",
             "access_role": "analyst",
             "chunk_size": "1000",
@@ -205,7 +216,6 @@ def test_non_pdf_is_detected_but_not_chunked_or_stored(
     response = client.post(
         "/process",
         data={
-            "strategy": "fixed",
             "name": "notes.txt",
             "access_role": "analyst",
             "chunk_size": "8",
@@ -216,23 +226,25 @@ def test_non_pdf_is_detected_but_not_chunked_or_stored(
     assert response.status_code == 200
     body = response.json()
     assert body["doc_type"] == "unknown"
-    assert body["chunks"] == []
-    assert body["chunk_count"] == 0
+    assert body["evaluations"] == []
     assert body["document_id"] is None
+    assert body["chunking_strategy"] is None
     fake_storage.insert_document.assert_not_called()
 
 
-def test_fixed_strategy_requires_chunk_size(
+def test_chunk_size_is_optional(
     make_pdf: Callable[[list[str]], bytes],
 ) -> None:
-    pdf = make_pdf(["anything"])
+    # No chunk_size: the fixed-size candidate falls back to its default.
+    pdf = make_pdf(["Cats purr. Cats nap."])
     response = client.post(
         "/process",
-        data={"strategy": "fixed", "name": "doc.pdf", "access_role": "analyst"},
+        data={"name": "doc.pdf", "access_role": "analyst"},
         files={"file": ("doc.pdf", pdf, "application/pdf")},
     )
 
-    assert response.status_code == 422
+    assert response.status_code == 200
+    assert response.json()["chunking_strategy"] in {"fixed", "semantic"}
 
 
 def test_name_and_access_role_are_required(
@@ -241,7 +253,7 @@ def test_name_and_access_role_are_required(
     pdf = make_pdf(["anything"])
     response = client.post(
         "/process",
-        data={"strategy": "fixed", "chunk_size": "8"},
+        data={"chunk_size": "8"},
         files={"file": ("doc.pdf", pdf, "application/pdf")},
     )
 
@@ -253,6 +265,7 @@ def test_retrieve_returns_matching_chunks(fake_storage: MagicMock) -> None:
         RetrievedChunk(
             document_id=1,
             document_name="doc.pdf",
+            chunking_strategy="fixed",
             chunk_index=0,
             page_number=2,
             text="the matching chunk",
@@ -272,9 +285,11 @@ def test_retrieve_returns_matching_chunks(fake_storage: MagicMock) -> None:
     assert body["results"][0]["text"] == "the matching chunk"
     assert body["results"][0]["score"] == 0.87
     # The role and top_k reached the search unchanged.
-    _, access_role, top_k = fake_storage.search_chunks.call_args.args
+    _, access_role, top_k, strategy = fake_storage.search_chunks.call_args.args
     assert access_role == "analyst"
     assert top_k == 3
+    # No strategy filter requested -> search every strategy.
+    assert strategy is None
 
 
 def test_retrieve_requires_a_query() -> None:
@@ -290,6 +305,7 @@ def test_answer_generates_from_retrieved_context(
         RetrievedChunk(
             document_id=1,
             document_name="biology.pdf",
+            chunking_strategy="fixed",
             chunk_index=0,
             page_number=1,
             text="Plants convert sunlight into energy.",

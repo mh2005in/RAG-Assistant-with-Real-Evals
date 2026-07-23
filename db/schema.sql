@@ -17,7 +17,11 @@ CREATE TABLE documents (
     id          BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     name        TEXT        NOT NULL,
     access_role TEXT        NOT NULL,
-    created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+    -- One row per document. Re-processing the same document reuses this row and
+    -- replaces its chunks, rather than piling up duplicates: the chunks already
+    -- carry the strategy that produced them, so nothing needs a second row.
+    UNIQUE (name, access_role)
 );
 
 -- One row per chunk produced from a document. Columns mirror the ``Chunk``
@@ -32,6 +36,13 @@ CREATE TABLE chunks (
     id                      BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     document_id             BIGINT      NOT NULL
                                 REFERENCES documents (id) ON DELETE CASCADE,
+    -- Which chunking strategy produced this chunk. The same document can be
+    -- chunked several ways so the strategies can be compared on equal footing;
+    -- retrieval can then be filtered to one strategy, and the losers deleted
+    -- (DELETE FROM chunks WHERE chunking_strategy <> '<winner>') without
+    -- touching the documents rows. Values come from the app's ChunkingStrategy
+    -- enum, which is the source of truth.
+    chunking_strategy       TEXT        NOT NULL,
     chunk_index             INT         NOT NULL,
     page_number             INT         NOT NULL,
     page_char_count         INT         NOT NULL,
@@ -41,12 +52,16 @@ CREATE TABLE chunks (
     text                    TEXT        NOT NULL,
     embedding               vector(768),
     created_at              TIMESTAMPTZ NOT NULL DEFAULT now(),
-    -- A document's chunks are numbered 0, 1, 2, ... with no gaps or repeats.
-    UNIQUE (document_id, chunk_index)
+    -- Chunks are numbered 0, 1, 2, ... within a document *for a given strategy*,
+    -- so the same document can hold several strategies' chunks side by side.
+    UNIQUE (document_id, chunking_strategy, chunk_index)
 );
 
 -- Fetch/delete a document's chunks by foreign key.
 CREATE INDEX chunks_document_id_idx ON chunks (document_id);
+
+-- Filter retrieval to one strategy, and delete the losing strategies in bulk.
+CREATE INDEX chunks_chunking_strategy_idx ON chunks (chunking_strategy);
 
 -- Approximate-nearest-neighbour index for similarity search. Cosine distance is
 -- the usual metric for these embeddings and matches how retrieval ranks chunks.

@@ -7,6 +7,8 @@ it), and how many chunks to return.
 
 from pydantic import BaseModel, Field
 
+from dtos.requests.chunking import ChunkingStrategy
+
 
 class RetrievalRequest(BaseModel):
     """Parameters for a similarity search over stored chunks."""
@@ -23,4 +25,11 @@ class RetrievalRequest(BaseModel):
         gt=0,
         le=100,
         description="Maximum number of chunks to return, most similar first.",
+    )
+    chunking_strategy: ChunkingStrategy | None = Field(
+        default=None,
+        description=(
+            "Only search chunks produced by this chunking strategy. "
+            "Omit to search every strategy."
+        ),
     )
