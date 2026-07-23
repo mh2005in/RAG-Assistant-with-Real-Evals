@@ -170,6 +170,7 @@ def test_search_chunks_runs_similarity_query_and_maps_rows() -> None:
         "access_role": "analyst",
         "top_k": 5,
         "chunking_strategy": None,
+        "document_id": None,
     }
 
     # Rows map to RetrievedChunk, and cosine distance becomes a 1 - d similarity.
@@ -322,6 +323,15 @@ def test_search_ranks_by_similarity_and_filters_by_role() -> None:
 
         # Role-based filter: a different role sees nothing.
         assert storage.search_chunks(near, "other-role", top_k=5) == []
+
+        # Document filter (used by /evaluate): confining to this document still
+        # returns its chunks; a different id returns nothing. This also exercises
+        # the bare-NULL cast in the SQL, which a mocked cursor cannot catch.
+        assert len(storage.search_chunks(near, "searcher", 5, document_id=document_id))
+        assert (
+            storage.search_chunks(near, "searcher", 5, document_id=document_id + 10_000)
+            == []
+        )
 
         with storage._conn.cursor() as cur:
             cur.execute("DELETE FROM documents WHERE id = %s", (document_id,))

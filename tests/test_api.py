@@ -258,18 +258,35 @@ def test_name_and_access_role_are_required(
     assert response.status_code == 422
 
 
-def test_evaluate_scores_strategies_and_prunes_losers(
+def test_evaluate_scores_strategies_against_qa_and_prunes_losers(
     fake_storage: MagicMock,
 ) -> None:
-    # Two strategies stored for the document; /evaluate scores and keeps one.
+    # Two strategies stored for the document; /evaluate scores each against the
+    # caller's Q&A by retrieving and keeps the best.
     fake_storage.read_chunk_texts_by_strategy.return_value = {
-        "fixed": ["Cats purr. Cats nap.", "Trains run. Trains are fast."],
-        "semantic": ["Cats purr. Cats nap.", "Trains run. Trains are fast."],
+        "fixed": ["Cats purr. Cats nap."],
+        "semantic": ["Cats purr. Cats nap."],
     }
+    fake_storage.search_chunks.return_value = [
+        RetrievedChunk(
+            document_id=55,
+            document_name="doc.pdf",
+            chunking_strategy="fixed",
+            chunk_index=0,
+            page_number=1,
+            text="Cats purr when content.",
+            score=0.9,
+        )
+    ]
 
     response = client.post(
         "/evaluate",
-        json={"document_id": 55, "access_role": "analyst"},
+        json={
+            "document_id": 55,
+            "access_role": "analyst",
+            "qa_pairs": [{"question": "what do cats do?", "answer": "cats purr"}],
+            "top_k": 3,
+        },
     )
 
     assert response.status_code == 200
@@ -280,8 +297,12 @@ def test_evaluate_scores_strategies_and_prunes_losers(
     selected = [item for item in body["evaluations"] if item["selected"]]
     assert len(selected) == 1
     assert body["chunking_strategy"] == selected[0]["strategy"]
-    scores = [item["score"] for item in body["evaluations"]]
-    assert scores == sorted(scores, reverse=True)
+    sims = [item["answer_similarity"] for item in body["evaluations"]]
+    assert sims == sorted(sims, reverse=True)
+    assert selected[0] is body["evaluations"][0]
+    # Retrieval was scoped to this document, at the requested top_k.
+    assert fake_storage.search_chunks.call_args.kwargs["document_id"] == 55
+    assert fake_storage.search_chunks.call_args.args[1:] == ("analyst", 3)
     # The document was read back under the request's role, and losers pruned.
     fake_storage.read_chunk_texts_by_strategy.assert_called_once_with(55, "analyst")
     fake_storage.delete_chunks_except.assert_called_once_with(
@@ -297,20 +318,49 @@ def test_evaluate_404_when_document_has_no_readable_chunks(
 
     response = client.post(
         "/evaluate",
-        json={"document_id": 999, "access_role": "analyst"},
+        json={
+            "document_id": 999,
+            "access_role": "analyst",
+            "qa_pairs": [{"question": "q", "answer": "a"}],
+        },
     )
 
     assert response.status_code == 404
     fake_storage.delete_chunks_except.assert_not_called()
 
 
-def test_evaluate_requires_document_id_and_access_role() -> None:
-    assert client.post("/evaluate", json={"access_role": "analyst"}).status_code == 422
-    assert client.post("/evaluate", json={"document_id": 1}).status_code == 422
+def test_evaluate_requires_document_role_and_qa_pairs() -> None:
+    qa = [{"question": "q", "answer": "a"}]
+    # Missing required fields.
+    assert (
+        client.post(
+            "/evaluate", json={"access_role": "analyst", "qa_pairs": qa}
+        ).status_code
+        == 422
+    )
+    assert (
+        client.post("/evaluate", json={"document_id": 1, "qa_pairs": qa}).status_code
+        == 422
+    )
+    # qa_pairs is required and must be non-empty.
+    assert (
+        client.post(
+            "/evaluate", json={"document_id": 1, "access_role": "analyst"}
+        ).status_code
+        == 422
+    )
+    assert (
+        client.post(
+            "/evaluate",
+            json={"document_id": 1, "access_role": "analyst", "qa_pairs": []},
+        ).status_code
+        == 422
+    )
     # document_id must be a positive id.
     assert (
         client.post(
-            "/evaluate", json={"document_id": 0, "access_role": "analyst"}
+            "/evaluate",
+            json={"document_id": 0, "access_role": "analyst", "qa_pairs": qa},
         ).status_code
         == 422
     )

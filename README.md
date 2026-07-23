@@ -27,8 +27,8 @@ flowchart LR
     end
     subgraph eval["POST /evaluate"]
       direction TB
-      RD["Read stored chunks"] --> SC["Score each strategy<br/>(cohesion vs separation)"]
-      SC --> PR["Keep the best,<br/>delete the rest"]
+      QA["Q&amp;A pairs"] --> RS["Retrieve per strategy<br/>(pgvector) + match answers"]
+      RS --> PR["Keep the best,<br/>delete the rest"]
     end
     subgraph ask["POST /retrieve and /answer"]
       direction TB
@@ -47,10 +47,13 @@ flowchart LR
   strategy, and embed and store them all. You don't pick a strategy, and none is
   scored or dropped here: the response reports which strategies were stored and
   their chunk counts.
-- **`POST /evaluate`** — score a stored document's strategies (label-free cohesion
-  vs separation), keep the winner's chunks and delete the losers, so the document
-  ends up holding exactly one strategy. Scoring is a **separate stage** from
-  chunking, so a document can be re-evaluated without re-processing.
+- **`POST /evaluate`** — score a stored document's strategies against a caller-
+  supplied labelled set (question/expected-answer pairs): retrieve against each
+  strategy for every question, rank the strategies by how well their retrievals
+  match the expected answers (aggregated with pandas), then keep the winner's
+  chunks and delete the losers. Scoring is a **separate stage** from chunking, so
+  a document can be re-evaluated (e.g. with a different question set) without
+  re-processing.
 - **`POST /retrieve`** — embed a query and run a pgvector cosine similarity
   search over the stored chunks, filtered by access role. Returns the closest
   chunks with similarity scores.
@@ -72,6 +75,7 @@ Each stage sits behind a small interface (`Chunker`, `Embedder`, `LLMClient`,
 | Embeddings & generation | Ollama (`nomic-embed-text` 768-dim, `gemma2:2b`) |
 | Vector store | PostgreSQL 17 + pgvector (HNSW, cosine) |
 | DB driver | psycopg 3 + pgvector adapter |
+| Eval scoring | pandas (+ NumPy) for the `/evaluate` retrieval eval |
 | Tests / types / lint | pytest, mypy, Ruff |
 | Local stack | Docker Compose (app + db + Ollama) |
 
@@ -137,43 +141,52 @@ The remaining inputs:
   every strategy. Excluded pages don't shift the numbering of the pages that
   remain.
 
-**2. Evaluate the stored strategies and keep the best:**
+**2. Evaluate the stored strategies against your Q&A and keep the best:**
 
 ```bash
 curl -X POST http://localhost:8000/evaluate \
   -H "Content-Type: application/json" \
-  -d '{"document_id": 1, "access_role": "analyst"}'
+  -d '{
+        "document_id": 1,
+        "access_role": "analyst",
+        "top_k": 5,
+        "qa_pairs": [
+          {"question": "how are chunks embedded?", "answer": "with Ollama nomic-embed-text"},
+          {"question": "what is the vector store?", "answer": "PostgreSQL with pgvector"}
+        ]
+      }'
 # -> { "document_id": 1,
 #      "chunking_strategy": "semantic",          # the one that remains
 #      "evaluations": [                          # best first
-#        {"strategy": "semantic", "chunk_count": 12, "mean_chunk_words": 84.2,
-#         "cohesion": 0.67, "separation": 0.49, "score": 0.18, "selected": true},
-#        {"strategy": "fixed", ..., "score": 0.0, "selected": false}
+#        {"strategy": "semantic", "questions": 2,
+#         "answer_similarity": 0.81, "hit_rate": 1.0, "selected": true},
+#        {"strategy": "fixed", "questions": 2,
+#         "answer_similarity": 0.63, "hit_rate": 0.5, "selected": false}
 #      ] }
 ```
 
 Scoring is a **separate stage** from chunking: `/process` never judges the
 strategies it stores, so chunking stays cheap and a document can be re-evaluated
-(e.g. with a different metric) without re-chunking. `/evaluate` reads the stored
-chunks back, scores every strategy, keeps the winner's chunks and **deletes the
-rest** — so the document ends up holding exactly one strategy. Only a document
-matching the request's `access_role` is evaluated (a 404 means no readable chunks).
+(e.g. with a different question set) without re-chunking. `/evaluate` decides the
+winner by **how well each strategy actually retrieves** — keeping the winner's
+chunks and **deleting the rest**, so the document ends up holding exactly one
+strategy. Only a document matching the request's `access_role` is evaluated (a 404
+means no readable chunks).
 
-How the winner is chosen — a label-free, silhouette-style score over sentence
-embeddings:
+How the winner is chosen — a labelled retrieval eval driven by your `qa_pairs`:
 
-- **cohesion** — mean similarity between sentences *inside* a chunk (higher is
-  better: each chunk is about one thing).
-- **separation** — mean similarity between *neighbouring* chunks (lower is
-  better: boundaries fall where the content changes).
-- **score = cohesion − separation**, highest wins. The two terms balance:
-  over-splitting leaves neighbours nearly identical, under-splitting mixes topics
-  inside a chunk. A single-chunk candidate scores **0.0** (no structure found),
-  and a negative score means the split is worse than not splitting at all.
+- For each **question**, retrieve the top-`top_k` chunks **per strategy** (the same
+  pgvector cosine search `/retrieve` uses, confined to this document and strategy).
+- Compare those retrieved chunks to the question's **expected answer** by cosine
+  similarity; each question's score is the best match found.
+- **`answer_similarity`** is the mean of those best matches across all questions —
+  the ranking metric; the highest wins. **`hit_rate`** is the fraction of questions
+  whose answer was matched above a similarity threshold. The per-question scores are
+  aggregated per strategy with **pandas**.
 
-> This measures chunk *structure*, not answer quality. It needs no labels, so it
-> runs on whatever you upload — but a retrieval eval against labelled queries is
-> the stronger signal, and is on the [Roadmap](#roadmap).
+> This measures **retrieval quality on your labelled questions** — the strategy that
+> best surfaces the answers you care about. Give it questions whose answers live in
+> the document; more/representative pairs make the ranking more reliable.
 
 **3. Retrieve relevant chunks:**
 
@@ -254,10 +267,10 @@ read the `PROCESSOR` column (`100% CPU`, `NN%/MM% CPU/GPU`, or `100% GPU`).
 api.py                     FastAPI app: /process, /evaluate, /retrieve, /answer (+ DI wiring)
 dtos/
   requests/                request models (chunking, evaluate, retrieval, answer)
-  responses/               response models (process, evaluate, chunk, retrieval, answer, storage)
+  responses/               response models (process, evaluate, chunk, retrieval, answer)
 services/
   file_processing.py       /process: detect → extract → chunk → embed → store
-  evaluation.py            /evaluate: read chunks → score strategies → keep the best
+  evaluation.py            /evaluate: retrieve per strategy vs Q&A → rank → keep the best
   retrieval.py             /retrieve: embed query → similarity search
   answering.py             /answer: retrieve → augment prompt → generate
   chunking/                Chunker interface + fixed-size and semantic strategies
@@ -328,10 +341,10 @@ Planned but **not yet implemented**:
 - **More chunking strategies** — structural, recursive, and LLM-based, each
   behind the existing `Chunker` interface so they plug into the same pipeline as
   the fixed-size and semantic strategies.
-- **Retrieval-quality strategy selection** — `/evaluate` already compares every
-  stored strategy and keeps the best by a label-free coherence score; the stronger
-  signal is recall@k / MRR against labelled queries, which would replace (or
-  outrank) the structural score when a labelled set exists.
+- **Richer retrieval metrics** — `/evaluate` already ranks strategies by a labelled
+  retrieval eval (answer-match similarity over caller-supplied Q&A). Natural next
+  steps: standard rank-aware metrics (recall@k / MRR / nDCG) over the same labelled
+  set, and an LLM-judge option for answer correctness beyond embedding similarity.
 - **Richer document & role categorization** — finer-grained document categories
   and user roles, so retrieval and the augmented prompt are scoped precisely to
   each user for more relevant, on-target answers, instead of a single flat

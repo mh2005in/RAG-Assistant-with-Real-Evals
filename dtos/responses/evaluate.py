@@ -1,37 +1,46 @@
 """Response DTOs for the evaluation endpoint (evaluation stage).
 
 Evaluation is a *separate* stage from chunking: ``/process`` stores every
-strategy's chunks without judging them, and ``/evaluate`` scores a stored
-document's strategies after the fact and keeps the best. Keeping the two apart
-means chunking never pays the cost of scoring, and the same document can be
-re-evaluated (e.g. with a different metric) without re-chunking.
+strategy's chunks without judging them, and ``/evaluate`` scores them after the
+fact against a caller-supplied labelled set (question/expected-answer pairs) and
+keeps the best. Each strategy is scored by how well retrieving against it surfaces
+the expected answers, so the winner is the one that actually retrieves best for
+this document — a labelled retrieval eval, not a structural heuristic.
 """
 
 from pydantic import BaseModel, Field
 
 
 class StrategyEvaluation(BaseModel):
-    """How one chunking strategy scored on a stored document.
+    """How one chunking strategy scored on the labelled question set.
 
-    ``score`` is ``cohesion - separation``; higher is better. The strategy with
-    the highest score is kept and the rest are deleted (see ``selected``).
+    For every question, the strategy's chunks are retrieved and compared to the
+    expected answer; ``answer_similarity`` is the mean over questions of the best
+    match between the retrieved chunks and the expected answer. The strategy with
+    the highest ``answer_similarity`` is kept and the rest are deleted (see
+    ``selected``).
     """
 
     strategy: str = Field(..., description="Chunking strategy that was evaluated.")
-    chunk_count: int = Field(..., ge=0, description="Chunks the strategy produced.")
-    mean_chunk_words: float = Field(
-        ..., ge=0, description="Average chunk length in words."
+    questions: int = Field(
+        ..., ge=0, description="Number of question/answer pairs scored."
     )
-    cohesion: float = Field(
+    answer_similarity: float = Field(
         ...,
-        description="Mean similarity between sentences inside a chunk; higher is better.",
+        description=(
+            "Mean over questions of the best cosine similarity between the "
+            "retrieved chunks and the expected answer; higher is better. Ranks the "
+            "strategies."
+        ),
     )
-    separation: float = Field(
+    hit_rate: float = Field(
         ...,
-        description="Mean similarity between neighbouring chunks; lower is better.",
-    )
-    score: float = Field(
-        ..., description="cohesion - separation; the strategy with the highest wins."
+        ge=0,
+        le=1,
+        description=(
+            "Fraction of questions whose expected answer was matched above the "
+            "similarity threshold by at least one retrieved chunk."
+        ),
     )
     selected: bool = Field(
         ..., description="Whether this strategy was kept (the others are deleted)."
@@ -41,8 +50,8 @@ class StrategyEvaluation(BaseModel):
 class EvaluateResponse(BaseModel):
     """Result of evaluating a stored document's chunking strategies.
 
-    Every strategy still held for the document is scored (cohesion vs
-    separation), the winner's chunks are kept and the losers' deleted, so after a
+    Every strategy still held for the document is scored against the labelled
+    questions, the winner's chunks are kept and the losers' deleted, so after a
     successful evaluation the document holds exactly one strategy's chunks.
     ``evaluations`` reports how each strategy did (best first) and
     ``chunking_strategy`` names the one that remains.
