@@ -1,0 +1,20 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write|MultiEdit|NotebookEdit",
+        "hooks": [
+          { "type": "command", "command": "uv run ruff format ." },
+          { "type": "command", "command": "uv run ruff check --fix ." }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          { "type": "command", "command": "uv run mypy ." }
+        ]
+      }
+    ]
+  }
+}

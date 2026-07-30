@@ -1,5 +1,7 @@
 #!/bin/sh
-# Secret scanning via gitleaks — blocks commits that stage likely secrets.
+# Pre-commit gate. Runs, in order: author check, secret scan (gitleaks),
+# fast tests (pytest). Any failure blocks the commit.
+#
 # Bypass a false positive with: git commit --no-verify
 #
 # Enable in a fresh clone with:  git config core.hooksPath .githooks
@@ -9,6 +11,16 @@
 #   macOS:    brew install gitleaks
 #   Linux:    package manager or download from GitHub releases
 
+# --- Author check: commits must be authored as mh2005in ---
+expected_author="mh2005in"
+author_name=$(git var GIT_AUTHOR_IDENT | sed 's/ <.*//')
+if [ "$author_name" != "$expected_author" ]; then
+    echo "Commit author is '$author_name' but must be '$expected_author'." >&2
+    echo "Fix it:  git config user.name \"$expected_author\"" >&2
+    exit 1
+fi
+
+# --- Secret scan ---
 if ! command -v gitleaks >/dev/null 2>&1; then
     echo "gitleaks is not installed — cannot scan staged changes for secrets." >&2
     echo "Install it:  winget install gitleaks   (or scoop / choco / brew)" >&2
@@ -17,4 +29,19 @@ if ! command -v gitleaks >/dev/null 2>&1; then
     exit 1
 fi
 
-exec gitleaks git --staged --redact --verbose
+if ! gitleaks git --staged --redact --verbose; then
+    exit 1
+fi
+
+# --- Fast tests (integration tests need a live DB, so they're excluded) ---
+if ! command -v uv >/dev/null 2>&1; then
+    echo "uv is not installed — cannot run tests before commit." >&2
+    echo "Install it:  https://docs.astral.sh/uv/getting-started/installation/" >&2
+    echo "To commit without running tests (not recommended): git commit --no-verify" >&2
+    exit 1
+fi
+
+if ! uv run pytest -q -m "not integration"; then
+    echo "Tests failed — commit blocked. Fix them or use: git commit --no-verify" >&2
+    exit 1
+fi
