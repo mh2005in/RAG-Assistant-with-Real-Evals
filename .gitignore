@@ -7,3 +7,7 @@ __pycache__/
 
 # Local environment / secrets (keep .env.example, ignore the real thing)
 .env
+
+# Transient marker the deploy-verify agent writes on a clean pass (consumed by
+# the SubagentStop cleanup hook); never committed.
+.claude/.deploy-verify-pass
