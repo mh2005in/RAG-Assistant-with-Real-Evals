@@ -271,25 +271,33 @@ read the `PROCESSOR` column (`100% CPU`, `NN%/MM% CPU/GPU`, or `100% GPU`).
 
 ## Project layout
 
+The repo is split into `backend/` (the Python/RAG service) and `frontend/`
+(reserved for the web UI, not built yet). Docker Compose and the shared
+environment config stay at the root and orchestrate both.
+
 ```
-api.py                     FastAPI app: /process, /evaluate, /retrieve, /answer (+ DI wiring)
-dtos/
-  requests/                request models (chunking, evaluate, retrieval, answer)
-  responses/               response models (process, evaluate, chunk, retrieval, answer)
-services/
-  file_processing.py       /process: detect → extract → chunk → embed → store
-  evaluation.py            /evaluate: retrieve per strategy vs Q&A → rank → keep the best
-  retrieval.py             /retrieve: embed query → similarity search
-  answering.py             /answer: retrieve → augment prompt → generate
-  chunking/                Chunker interface + fixed-size and semantic strategies
-  embedding/               Embedder interface + Ollama backend
-  generation/              LLMClient interface + Ollama backend
-  storage/                 PostgresStorage (pgvector reads/writes)
-db/schema.sql              documents + chunks tables, FK + HNSW cosine index
-evals/                     reproducible evals (chunking strategy comparison)
-tests/                     pytest: fast offline units + DB integration (marked)
-docker-compose.yml         app + Postgres/pgvector + Ollama
-Dockerfile                 app image (uv, uvicorn)
+backend/                   the Python/RAG service (run uv commands from here)
+  api.py                   FastAPI app: /process, /evaluate, /retrieve, /answer (+ DI wiring)
+  dtos/
+    requests/              request models (chunking, evaluate, retrieval, answer)
+    responses/             response models (process, evaluate, chunk, retrieval, answer)
+  services/
+    file_processing.py     /process: detect → extract → chunk → embed → store
+    evaluation.py          /evaluate: retrieve per strategy vs Q&A → rank → keep the best
+    retrieval.py           /retrieve: embed query → similarity search
+    answering.py           /answer: retrieve → augment prompt → generate
+    chunking/              Chunker interface + fixed-size and semantic strategies
+    embedding/             Embedder interface + Ollama backend
+    generation/            LLMClient interface + Ollama backend
+    storage/               PostgresStorage (pgvector reads/writes)
+  db/schema.sql            documents + chunks tables, FK + HNSW cosine index
+  evals/                   reproducible evals (chunking strategy comparison)
+  tests/                   pytest: fast offline units + DB integration (marked)
+  Dockerfile               app image (uv, uvicorn)
+  pyproject.toml, uv.lock  dependencies + pinned lockfile
+frontend/                  web UI (placeholder — to be added)
+docker-compose.yml         app + Postgres/pgvector + Ollama (build context: ./backend)
+.env.example               shared environment config (Postgres, Ollama, ports)
 ```
 
 ### Data model
@@ -301,7 +309,7 @@ Dockerfile                 app image (uv, uvicorn)
 - **`chunks`** — `id`, `document_id` (FK, cascade delete), `chunking_strategy`,
   `chunk_index`, per-page stats, `text`, `embedding vector(768)`, `created_at`;
   with an HNSW cosine index for similarity search. See
-  [`db/schema.sql`](db/schema.sql).
+  [`backend/db/schema.sql`](backend/db/schema.sql).
 
   `chunking_strategy` records which strategy produced each chunk. During
   `/process` every strategy's chunks are written against the same `documents`
@@ -312,10 +320,13 @@ Dockerfile                 app image (uv, uvicorn)
 
 ## Development
 
-Requires [`uv`](https://docs.astral.sh/uv/) and Python 3.13. Dependencies live in
-`pyproject.toml`; the lockfile is `uv.lock` (both are committed).
+Requires [`uv`](https://docs.astral.sh/uv/) and Python 3.13. The Python project
+lives in `backend/`, so run these from that directory (`cd backend`).
+Dependencies live in `backend/pyproject.toml`; the lockfile is `backend/uv.lock`
+(both are committed).
 
 ```bash
+cd backend
 uv sync                          # install deps into .venv
 uv run pytest                    # fast, offline unit tests
 uv run ruff format . && uv run ruff check .
@@ -323,14 +334,15 @@ uv run mypy .
 ```
 
 **Integration tests** need a live database and are skipped otherwise. With the
-compose stack up:
+compose stack up (run from `backend/`):
 
 ```bash
 DATABASE_URL=postgresql://rag:rag@localhost:5435/rag uv run pytest -m integration
 ```
 
 **Evals** are reproducible and checked in as regenerable artifacts. The strategy
-comparison embeds sentences, so it needs the Ollama service running:
+comparison embeds sentences, so it needs the Ollama service running (run from
+`backend/`):
 
 ```bash
 uv run python -m evals.fixed_size_chunking_eval    # fixed-size baseline sweep
@@ -416,16 +428,16 @@ ones that add signal beyond today's method — and they need an LLM judge, plus 
 
 Keep it **out of the online request path** — RAGAS is async, LLM-heavy, and
 non-deterministic, which does not belong in a `/evaluate` HTTP call. Instead add a
-reproducible offline eval, consistent with the existing `evals/` artifacts:
+reproducible offline eval, consistent with the existing `backend/evals/` artifacts:
 
-- **`evals/ragas_chunking_eval.py`** — for each stored strategy: retrieve per
+- **`backend/evals/ragas_chunking_eval.py`** — for each stored strategy: retrieve per
   question (reuse `PostgresStorage.search_chunks`, confined to the document +
   strategy), generate an answer from the retrieved context (reuse
-  `services/generation`), assemble a RAGAS dataset, and score it.
+  `backend/services/generation`), assemble a RAGAS dataset, and score it.
 - **Fully local wiring** — point RAGAS at Ollama for both judge and embeddings via
   `langchain_ollama` + RAGAS's `LangchainLLMWrapper` / `LangchainEmbeddingsWrapper`.
   No external API, no per-call cloud cost.
-- **Output** — a regenerable `evals/results/ragas_chunking.json` (per-strategy
+- **Output** — a regenerable `backend/evals/results/ragas_chunking.json` (per-strategy
   metric table + winner), the same "scores as artifacts" pattern the other evals
   follow. Optionally, a strategy winner could feed the same prune step `/evaluate`
   uses today.

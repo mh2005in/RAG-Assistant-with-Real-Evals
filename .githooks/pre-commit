@@ -41,7 +41,7 @@ if ! command -v uv >/dev/null 2>&1; then
     exit 1
 fi
 
-if ! uv run pytest -q -m "not integration"; then
+if ! uv run --directory backend pytest -q -m "not integration"; then
     echo "Tests failed — commit blocked. Fix them or use: git commit --no-verify" >&2
     exit 1
 fi

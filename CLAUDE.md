@@ -11,17 +11,20 @@ Guidance for working in this repository. Keep it short and current — prune rul
 
 RAG assistant built with an **evaluation-driven** approach: every pipeline stage (extraction → web scraping → chunking → embedding → storage → validation) is measured with real evals, not vibes. See [README.md](README.md) for the stage-by-stage architecture. Early development — architecture and tooling are still being finalized.
 
+**Repository layout:** the Python/RAG service lives in [`backend/`](backend/) (all app code, `pyproject.toml`/`uv.lock`, `Dockerfile`, `db/`); [`frontend/`](frontend/) is reserved for the web UI (not built yet). Docker Compose, `.env`/`.env.example`, this file, and the README stay at the repo root and span both. **Run all `uv`/Python commands from `backend/`** (`cd backend`, or `uv run --directory backend …`).
+
 ## Enforced automatically (don't re-check by hand)
 
-- **Format, lint, type check** — `.claude/settings.json` hooks run `ruff format` + `ruff check --fix` after every edit and `mypy` at the end of each turn. Still fix anything they flag before calling work done.
-- **Pre-commit gate** — the `.githooks/pre-commit` hook checks the author is `mh2005in`, runs `gitleaks` on staged changes, then runs the fast tests (`pytest -m "not integration"`). gitleaks matches secret *patterns* only; **it does not catch PII** (real names, emails) — that's on you.
+- **Format, lint, type check** — `.claude/settings.json` hooks run `ruff format` + `ruff check --fix` after every edit and `mypy` at the end of each turn (all via `uv run --directory backend`, since the project lives there). Still fix anything they flag before calling work done.
+- **Pre-commit gate** — the `.githooks/pre-commit` hook checks the author is `mh2005in`, runs `gitleaks` on staged changes, then runs the fast tests (`pytest -m "not integration"`, from `backend/`). gitleaks matches secret *patterns* only; **it does not catch PII** (real names, emails) — that's on you.
 - **Worktree cleanup** — the `.githooks/post-merge` hook removes merged worktrees. See that file's header for exactly when it runs.
+- **Post-deploy cleanup** — after the [`deploy-verify`](.claude/agents/deploy-verify.md) agent signals a clean pass (it writes `.claude/.deploy-verify-pass`), a `SubagentStop` hook (`.claude/hooks/deploy-verify-cleanup.sh`) removes build/verify leftovers: Python caches, dangling Docker images + build cache, the session scratchpad, and empty stray dirs. It's a no-op after any other subagent or a failed deploy, and never fails the turn.
 - Enable the git hooks in a fresh clone: `git config core.hooksPath .githooks`.
 
 ## Tooling
 
-- **Package/env manager: `uv`.** Never call `pip` or edit dependency versions by hand. Add deps with `uv add <pkg>` (dev: `uv add --dev`); run anything with `uv run <cmd>`. Commit both `pyproject.toml` and `uv.lock`.
-- Target the single pinned Python version in `pyproject.toml` (`requires-python`).
+- **Package/env manager: `uv`.** Never call `pip` or edit dependency versions by hand. Add deps with `uv add <pkg>` (dev: `uv add --dev`); run anything with `uv run <cmd>`. Run these from `backend/` — that's where `pyproject.toml`/`uv.lock` live. Commit both `backend/pyproject.toml` and `backend/uv.lock`.
+- Target the single pinned Python version in `backend/pyproject.toml` (`requires-python`).
 
 ## Eval-driven workflow
 
@@ -33,25 +36,25 @@ RAG assistant built with an **evaluation-driven** approach: every pipeline stage
 ## Code style & structure
 
 - Validate structured inputs/outputs with **Pydantic** models, not raw dicts across module boundaries.
-- **Keep request/response DTOs in separate folders** under `dtos/` (`dtos/requests/`, `dtos/responses/`). Don't define them inline in `api.py` or route modules; import them.
-- **Put processing logic in `services/`, not route handlers.** Search `services/` for an existing implementation before writing a new one; reuse or extract-and-share rather than duplicate. Route handlers stay thin and delegate.
-- **One service class per endpoint — don't over-modularize.** Each processing step is a method on that class, not a module per step (e.g. everything behind `/process` lives on `FileProcessing` in `services/file_processing.py`). Only split into a new service once a second endpoint needs it.
+- **Keep request/response DTOs in separate folders** under `backend/dtos/` (`backend/dtos/requests/`, `backend/dtos/responses/`). Don't define them inline in `backend/api.py` or route modules; import them.
+- **Put processing logic in `backend/services/`, not route handlers.** Search `backend/services/` for an existing implementation before writing a new one; reuse or extract-and-share rather than duplicate. Route handlers stay thin and delegate.
+- **One service class per endpoint — don't over-modularize.** Each processing step is a method on that class, not a module per step (e.g. everything behind `/process` lives on `FileProcessing` in `backend/services/file_processing.py`). Only split into a new service once a second endpoint needs it.
 - **Use the narrowest access a method allows.** Mark internals with a single leading underscore; keep a class's public surface to what callers actually use (`FileProcessing` exposes only `process()`). Same for module-level helpers/constants. Widen to public only for a real external caller.
 - Organize by pipeline stage; keep each stage's strategies swappable behind a common interface so evals compare apples-to-apples.
 - Match surrounding style; don't add a second way to do something that already has a pattern.
 
 ## Testing
 
-- **pytest** (`uv run pytest`). Write tests alongside the code they cover; a bug fix comes with a test that fails without it.
+- **pytest** (`uv run pytest`, from `backend/`). Write tests alongside the code they cover; a bug fix comes with a test that fails without it.
 - Keep unit tests fast and offline — mock external services (LLM APIs, Firecrawl, DB). Tests needing Postgres/pgvector or network go behind `@pytest.mark.integration` so the default run stays fast.
 - Don't delete or weaken a failing test to make the suite pass — fix the cause or ask.
 
 ## Local stack (Docker Compose)
 
-- The app is packaged ([Dockerfile](Dockerfile)) and runs as the `app` service in [docker-compose.yml](docker-compose.yml) alongside Postgres/pgvector and Ollama. Whole stack: `docker compose up -d --build` (app on `http://localhost:8000`). Keep it runnable this way.
+- The app is packaged ([backend/Dockerfile](backend/Dockerfile), build context `./backend`) and runs as the `app` service in [docker-compose.yml](docker-compose.yml) alongside Postgres/pgvector and Ollama. Whole stack: `docker compose up -d --build` (from repo root; app on `http://localhost:8000`). Keep it runnable this way.
 - **Wire new functionality into the stack in the same change:** new env var → add to the `app` service `environment:` and [.env.example](.env.example); new dependency (service/model) → add a compose service and wire `depends_on`/env. New Python deps are picked up by `uv sync` on the next `--build`.
 - **Services talk by compose service name** over the internal network (`db:5432`, `ollama:11434`), not `localhost` or host ports. `DATABASE_URL` is built in compose — don't hardcode it.
-- After a change, verify the stack still builds and runs, then exercise the affected endpoint — not just host-run tests.
+- **After any change that could affect the deployable stack, verify it with the [`deploy-verify`](.claude/agents/deploy-verify.md) agent** — and again before a commit/PR that touches those. "Stack-affecting" means the `backend/Dockerfile`, `docker-compose.yml`, backend deps (`backend/pyproject.toml`/`uv.lock`), env config (`.env.example`), `backend/db/schema.sql`, or backend app code. The agent builds the stack, waits for the `rag-app`/`rag-postgres`/`rag-ollama` healthchecks, and exercises `/openapi.json` — real deploy + health, not just host-run tests. Docs- or test-only changes don't need it.
 
 ## Documentation
 

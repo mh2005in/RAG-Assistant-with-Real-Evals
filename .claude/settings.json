@@ -4,15 +4,22 @@
       {
         "matcher": "Edit|Write|MultiEdit|NotebookEdit",
         "hooks": [
-          { "type": "command", "command": "uv run ruff format ." },
-          { "type": "command", "command": "uv run ruff check --fix ." }
+          { "type": "command", "command": "uv run --directory backend ruff format ." },
+          { "type": "command", "command": "uv run --directory backend ruff check --fix ." }
         ]
       }
     ],
     "Stop": [
       {
         "hooks": [
-          { "type": "command", "command": "uv run mypy ." }
+          { "type": "command", "command": "uv run --directory backend mypy ." }
+        ]
+      }
+    ],
+    "SubagentStop": [
+      {
+        "hooks": [
+          { "type": "command", "command": "sh .claude/hooks/deploy-verify-cleanup.sh" }
         ]
       }
     ]

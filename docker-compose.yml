@@ -11,10 +11,10 @@
 # or a .env file. These are NOT production secrets -- never point this at real data.
 services:
   app:
-    # The FastAPI app (see Dockerfile). DATABASE_URL and OLLAMA_* are built here
-    # from the db/ollama service config, so the app talks to them over the
-    # internal network -- no host ports, nothing to set by hand.
-    build: .
+    # The FastAPI app (see backend/Dockerfile). DATABASE_URL and OLLAMA_* are
+    # built here from the db/ollama service config, so the app talks to them over
+    # the internal network -- no host ports, nothing to set by hand.
+    build: ./backend
     container_name: rag-app
     depends_on:
       db:
@@ -32,7 +32,7 @@ services:
       - "${APP_PORT:-8000}:8000"
   db:
     # Postgres with the pgvector extension preinstalled (matches vector(768) in
-    # db/schema.sql). Pinned to a major version for reproducibility.
+    # backend/db/schema.sql). Pinned to a major version for reproducibility.
     image: pgvector/pgvector:pg17
     container_name: rag-postgres
     environment:
@@ -47,7 +47,7 @@ services:
       # Applied once, only when the data volume is first created: creates the
       # vector extension and the documents/chunks tables. Delete the volume to
       # re-run it (docker compose down -v).
-      - ./db/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+      - ./backend/db/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-rag} -d ${POSTGRES_DB:-rag}"]
       interval: 5s
