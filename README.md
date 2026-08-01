@@ -407,6 +407,15 @@ produces the static bundle the image serves. To point the app at a backend on a
 different origin instead of proxying, set `API_BASE` in
 [`frontend/src/app/core/api-config.ts`](frontend/src/app/core/api-config.ts).
 
+**Tests.** End-to-end tests use [Playwright](https://playwright.dev)
+(`frontend/e2e/`). `npm run e2e` runs the fast, offline suite — the API is
+stubbed in-browser, so no backend is needed — and runs in CI on frontend
+changes. `npm run e2e:stack` runs against the live Compose stack to check what
+only the deployment proves (the nginx SPA fallback and the reverse-proxy hop);
+it needs the stack up and is run by the `deploy-verify` agent. First run
+`npm run e2e:install` to fetch the browser. Angular component unit specs run
+under `npm test` (karma).
+
 ## Roadmap
 
 Planned but **not yet implemented**:
