@@ -35,6 +35,7 @@
       <textarea
         name="query"
         rows="3"
+        data-testid="query"
         [(ngModel)]="query"
         [placeholder]="
           mode === 'answer'
@@ -74,7 +75,7 @@
 @if (answer) {
   <section class="card">
     <h3>Answer</h3>
-    <p class="answer-text">{{ answer.answer }}</p>
+    <p class="answer-text" data-testid="answer-text">{{ answer.answer }}</p>
 
     <h4 class="muted">Sources ({{ answer.sources.length }})</h4>
     @if (answer.sources.length === 0) {
@@ -82,7 +83,7 @@
     } @else {
       <ul class="chunks">
         @for (chunk of answer.sources; track $index) {
-          <li class="chunk">
+          <li class="chunk" data-testid="chunk">
             <div class="chunk-meta">
               <span class="tag">{{ chunk.document_name }}</span>
               <span class="tag ghost">{{ chunk.chunking_strategy }}</span>
@@ -105,7 +106,7 @@
     } @else {
       <ul class="chunks">
         @for (chunk of retrieval.results; track $index) {
-          <li class="chunk">
+          <li class="chunk" data-testid="chunk">
             <div class="chunk-meta">
               <span class="tag">{{ chunk.document_name }}</span>
               <span class="tag ghost">{{ chunk.chunking_strategy }}</span>

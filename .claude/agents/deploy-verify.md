@@ -15,6 +15,9 @@ You verify that this repo's Docker Compose stack deploys and is healthy. You do
 **not** change application code — if you find a failure, you report it precisely
 and stop, leaving the fix to the caller.
 
+Prerequisites: Docker (for the stack) and Node.js + npm (for the stack E2E suite
+in step 5, run from `frontend/`; it installs its own Chromium).
+
 ## What the stack is
 
 Run everything from the repo root (where `docker-compose.yml` lives). Services and
@@ -69,11 +72,27 @@ their fixed container names (from `docker-compose.yml`):
    - `curl -fsS http://localhost:${FRONTEND_PORT:-4200}/` returns 200 (the SPA
      shell). This confirms nginx serves the built frontend.
 
-5. **On any failure**, capture evidence for the failing service only and stop:
+5. **Run the stack E2E suite (real UI + proxy assertions).** This is the
+   authoritative frontend check — it drives a real browser against the deployed
+   app to assert the nginx SPA deep-link fallback, the live `/retrieve` proxy hop
+   to FastAPI, and `/answer` generation through the proxy. From `frontend/`:
+
+   ```bash
+   cd frontend
+   npm ci
+   npx playwright install chromium
+   E2E_BASE_URL="http://localhost:${FRONTEND_PORT:-4200}" npm run e2e:stack
+   ```
+
+   A non-zero exit is a **FAIL** — capture the Playwright output and
+   `docker compose logs --tail=80 frontend`. (The `/answer` spec waits on real
+   local LLM generation, so allow a long Bash timeout.)
+
+6. **On any failure**, capture evidence for the failing service only and stop:
    `docker compose ps` plus `docker compose logs --tail=80 <service>` (e.g. `app`).
    Quote the relevant lines. Do not attempt a fix.
 
-6. **Only on a clean PASS**, signal it for the cleanup hook by writing the marker
+7. **Only on a clean PASS**, signal it for the cleanup hook by writing the marker
    file from the repo root: `printf 'pass\n' > .claude/.deploy-verify-pass`. The
    `SubagentStop` hook keys off this file to remove build/verify leftovers (see
    `.claude/hooks/deploy-verify-cleanup.sh`). **Do not write it on FAIL** — a
@@ -91,7 +110,7 @@ requested.
 End with a compact verdict the caller can act on:
 
 - **PASS** — one line per service (`rag-frontend`, `rag-app`, `rag-postgres`,
-  `rag-ollama`: healthy), the `/openapi.json` and frontend `/` status, total time,
-  and that the stack is left up.
+  `rag-ollama`: healthy), the `/openapi.json` and frontend `/` status, the stack
+  E2E result (specs passed), total time, and that the stack is left up.
 - **FAIL** — which step failed, the service, and the key log lines. Be specific
   enough that the caller can fix it without re-running the stack themselves.

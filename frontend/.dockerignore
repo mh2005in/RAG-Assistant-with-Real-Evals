@@ -8,3 +8,10 @@ dist
 *.log
 Dockerfile
 .dockerignore
+
+# E2E tests are not part of the served app
+e2e
+playwright.config.ts
+playwright.stack.config.ts
+playwright-report
+test-results

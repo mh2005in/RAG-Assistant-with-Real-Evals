@@ -47,6 +47,7 @@ RAG assistant built with an **evaluation-driven** approach: every pipeline stage
 
 - **pytest** (`uv run pytest`, from `backend/`). Write tests alongside the code they cover; a bug fix comes with a test that fails without it.
 - Keep unit tests fast and offline — mock external services (LLM APIs, Firecrawl, DB). Tests needing Postgres/pgvector or network go behind `@pytest.mark.integration` so the default run stays fast.
+- **Frontend E2E: Playwright** (specs in `frontend/e2e/`, run from `frontend/`). Same fast-vs-integration split as pytest: `npm run e2e` is the default — offline, the four API endpoints stubbed in-browser with `page.route()`, no backend needed (run in CI on frontend changes). `npm run e2e:stack` runs against the live Compose stack (nginx + FastAPI) for what only the deployment proves (SPA deep-link fallback, the proxy hop) — the integration tier, run by the [`deploy-verify`](.claude/agents/deploy-verify.md) agent, not on every change. Angular component unit specs stay under `ng test` (karma). Prefer role/label selectors; add a `data-testid` only when disambiguation needs it.
 - Don't delete or weaken a failing test to make the suite pass — fix the cause or ask.
 
 ## Local stack (Docker Compose)
