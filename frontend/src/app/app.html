@@ -1,0 +1,28 @@
+<header class="topbar">
+  <div class="brand">
+    <span class="logo" aria-hidden="true">◆</span>
+    <div>
+      <strong>RAG Assistant</strong>
+      <span class="brand-sub">with real evals</span>
+    </div>
+  </div>
+
+  <nav class="tabs" aria-label="Sections">
+    <a routerLink="/user" routerLinkActive="active">Ask</a>
+    <a routerLink="/admin" routerLinkActive="active">Admin</a>
+  </nav>
+
+  <label class="role">
+    <span>Access role</span>
+    <input
+      type="text"
+      name="accessRole"
+      [(ngModel)]="session.accessRole"
+      placeholder="e.g. public"
+    />
+  </label>
+</header>
+
+<main class="content">
+  <router-outlet />
+</main>

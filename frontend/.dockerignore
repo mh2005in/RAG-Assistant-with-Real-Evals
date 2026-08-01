@@ -1,0 +1,10 @@
+# Keep the build context small and reproducible: deps are installed from the
+# lockfile inside the image, and build output is generated there.
+node_modules
+dist
+.angular
+.vscode
+.git
+*.log
+Dockerfile
+.dockerignore

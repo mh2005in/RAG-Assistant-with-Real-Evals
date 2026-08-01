@@ -1,0 +1,121 @@
+<section class="card">
+  <div class="card-head">
+    <h2>Ask your documents</h2>
+    <p class="muted">
+      Search the chunks stored under the <strong>{{ session.accessRole || '—' }}</strong>
+      access role. <em>Answer</em> generates a grounded reply; <em>Retrieve</em> returns
+      the raw matching chunks.
+    </p>
+  </div>
+
+  <div class="segmented" role="tablist" aria-label="Query mode">
+    <button
+      type="button"
+      role="tab"
+      [class.active]="mode === 'answer'"
+      [attr.aria-selected]="mode === 'answer'"
+      (click)="setMode('answer')"
+    >
+      Answer
+    </button>
+    <button
+      type="button"
+      role="tab"
+      [class.active]="mode === 'retrieve'"
+      [attr.aria-selected]="mode === 'retrieve'"
+      (click)="setMode('retrieve')"
+    >
+      Retrieve
+    </button>
+  </div>
+
+  <form (ngSubmit)="submit()">
+    <label class="field">
+      <span>{{ mode === 'answer' ? 'Question' : 'Search query' }}</span>
+      <textarea
+        name="query"
+        rows="3"
+        [(ngModel)]="query"
+        [placeholder]="
+          mode === 'answer'
+            ? 'e.g. What is the refund policy?'
+            : 'e.g. refund policy window'
+        "
+      ></textarea>
+    </label>
+
+    <div class="field-row">
+      <label class="field">
+        <span>Top K</span>
+        <input type="number" name="topK" min="1" max="100" [(ngModel)]="topK" />
+      </label>
+
+      <label class="field">
+        <span>Chunking strategy</span>
+        <select name="strategy" [(ngModel)]="strategy">
+          <option value="">All strategies</option>
+          @for (s of strategies; track s) {
+            <option [value]="s">{{ s }}</option>
+          }
+        </select>
+      </label>
+    </div>
+
+    <button type="submit" class="primary" [disabled]="loading">
+      {{ loading ? 'Working…' : mode === 'answer' ? 'Answer' : 'Retrieve' }}
+    </button>
+  </form>
+
+  @if (error) {
+    <p class="error" role="alert">{{ error }}</p>
+  }
+</section>
+
+@if (answer) {
+  <section class="card">
+    <h3>Answer</h3>
+    <p class="answer-text">{{ answer.answer }}</p>
+
+    <h4 class="muted">Sources ({{ answer.sources.length }})</h4>
+    @if (answer.sources.length === 0) {
+      <p class="muted">No sources were retrieved.</p>
+    } @else {
+      <ul class="chunks">
+        @for (chunk of answer.sources; track $index) {
+          <li class="chunk">
+            <div class="chunk-meta">
+              <span class="tag">{{ chunk.document_name }}</span>
+              <span class="tag ghost">{{ chunk.chunking_strategy }}</span>
+              <span class="tag ghost">p.{{ chunk.page_number }}</span>
+              <span class="score">score {{ chunk.score | number: '1.3-3' }}</span>
+            </div>
+            <p class="chunk-text">{{ chunk.text }}</p>
+          </li>
+        }
+      </ul>
+    }
+  </section>
+}
+
+@if (retrieval) {
+  <section class="card">
+    <h3>Retrieved chunks ({{ retrieval.count }})</h3>
+    @if (retrieval.count === 0) {
+      <p class="muted">Nothing matched this query for the current access role.</p>
+    } @else {
+      <ul class="chunks">
+        @for (chunk of retrieval.results; track $index) {
+          <li class="chunk">
+            <div class="chunk-meta">
+              <span class="tag">{{ chunk.document_name }}</span>
+              <span class="tag ghost">{{ chunk.chunking_strategy }}</span>
+              <span class="tag ghost">p.{{ chunk.page_number }}</span>
+              <span class="score">score {{ chunk.score | number: '1.3-3' }}</span>
+            </div>
+            <p class="chunk-text">{{ chunk.text }}</p>
+          </li>
+        }
+      </ul>
+    }
+  </section>
+}

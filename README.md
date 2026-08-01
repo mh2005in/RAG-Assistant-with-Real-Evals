@@ -81,12 +81,12 @@ Each stage sits behind a small interface (`Chunker`, `Embedder`, `LLMClient`,
 
 ## Quickstart (Docker)
 
-The whole stack — the app plus Postgres/pgvector and Ollama — runs from Docker
-Compose. You only need Docker installed.
+The whole stack — the Angular frontend, the app, Postgres/pgvector and Ollama —
+runs from Docker Compose. You only need Docker installed.
 
 ```bash
 cp .env.example .env             # local-dev defaults (rag/rag); not production secrets
-docker compose up -d --build     # builds the app image, starts db + ollama, pulls the models
+docker compose up -d --build     # builds the frontend + app images, starts db + ollama, pulls the models
 ```
 
 On first start this pulls the Ollama models (`gemma2:2b` ~1.6 GB and
@@ -95,11 +95,14 @@ runs comfortably on modest hardware (CPU-only is fine). For higher-quality answe
 on a bigger machine, set `OLLAMA_MODEL=gpt-oss:20b` (~13 GB, needs ~16 GB of
 RAM/VRAM) in `.env`. When it's up:
 
+- Frontend: <http://localhost:4200> — the web UI (Ask + Admin tabs). It proxies
+  API calls to the app internally, so everything is same-origin.
 - App: <http://localhost:8000> — interactive API docs at
   <http://localhost:8000/docs>
-- The app reaches its dependencies over the internal network (`db:5432`,
-  `ollama:11434`); the published host ports (`5435`, `11434`) are only for direct
-  access from your machine.
+- Services reach each other over the internal network (the frontend proxies to
+  `app:8000`; the app talks to `db:5432` and `ollama:11434`); the published host
+  ports (`4200`, `8000`, `5435`, `11434`) are only for direct access from your
+  machine.
 
 Stop it with `docker compose down` (add `-v` to also wipe the Postgres data and
 pulled models).
@@ -272,8 +275,8 @@ read the `PROCESSOR` column (`100% CPU`, `NN%/MM% CPU/GPU`, or `100% GPU`).
 ## Project layout
 
 The repo is split into `backend/` (the Python/RAG service) and `frontend/`
-(reserved for the web UI, not built yet). Docker Compose and the shared
-environment config stay at the root and orchestrate both.
+(an Angular web UI — see [Frontend](#frontend-angular)). Docker Compose and the
+shared environment config stay at the root and orchestrate both.
 
 ```
 backend/                   the Python/RAG service (run uv commands from here)
@@ -295,8 +298,15 @@ backend/                   the Python/RAG service (run uv commands from here)
   tests/                   pytest: fast offline units + DB integration (marked)
   Dockerfile               app image (uv, uvicorn)
   pyproject.toml, uv.lock  dependencies + pinned lockfile
-frontend/                  web UI (placeholder — to be added)
-docker-compose.yml         app + Postgres/pgvector + Ollama (build context: ./backend)
+frontend/                  Angular web UI (standalone components, Angular 20)
+  src/app/
+    core/                  API client, DTO types, shared session (access role)
+    user/                  Ask tab — /retrieve and /answer
+    admin/                 Admin tab — upload (/process) and /evaluate
+  proxy.conf.json          dev-server proxy: /process,/evaluate,/retrieve,/answer → :8000
+  Dockerfile               builds the SPA, serves it with nginx (+ API reverse-proxy)
+  nginx.conf               SPA fallback + proxies the API paths to app:8000
+docker-compose.yml         frontend + app + Postgres/pgvector + Ollama
 .env.example               shared environment config (Postgres, Ollama, ports)
 ```
 
@@ -353,6 +363,49 @@ uv run python -m evals.chunking_strategies_eval   # fixed vs semantic, same docu
 hooks in a fresh clone with `git config core.hooksPath .githooks` (requires
 [gitleaks](https://github.com/gitleaks/gitleaks#installing) installed). See
 [CLAUDE.md](CLAUDE.md) for the full contributor conventions.
+
+## Frontend (Angular)
+
+A single-page [Angular 20](https://angular.dev) app (standalone components) in
+[`frontend/`](frontend/) that drives the four backend endpoints from two tabs:
+
+- **Ask** (`/user`) — for readers. Enter a question and either **Answer**
+  (`POST /answer`, a grounded reply plus its cited source chunks) or **Retrieve**
+  (`POST /retrieve`, the raw ranked chunks). Optional top-K and chunking-strategy
+  filter.
+- **Admin** (`/admin`) — for maintainers. **Upload &amp; process** a PDF
+  (`POST /process`, with optional chunk size and page exclusions) and then
+  **Evaluate** the stored strategies (`POST /evaluate`) against a list of
+  question / expected-answer pairs; the upload pre-fills the document id, and the
+  result table shows each strategy's answer similarity, hit rate, and which one
+  was kept.
+
+The **access role** is set once in the header and applied to every request. In
+every setup the browser talks to a single origin — the four API paths are
+proxied to the backend — so no CORS configuration is needed.
+
+**In the Docker stack (recommended).** `docker compose up -d --build` builds and
+runs the frontend as the `frontend` service: an nginx container
+([`frontend/Dockerfile`](frontend/Dockerfile)) that serves the compiled SPA and
+reverse-proxies `/process`, `/evaluate`, `/retrieve` and `/answer` to `app:8000`
+over the internal network (see [`frontend/nginx.conf`](frontend/nginx.conf)).
+Open <http://localhost:4200> (override with `FRONTEND_PORT`).
+
+**Dev server (for frontend work; Node 20+).** For live reload while editing the
+UI, run against a backend that is already up:
+
+```bash
+cd frontend
+npm install
+npm start          # dev server on http://localhost:4200
+```
+
+Here the Angular dev server does the same proxying via
+[`frontend/proxy.conf.json`](frontend/proxy.conf.json), so start the backend
+first (`docker compose up -d --build`, or run the API directly). `npm run build`
+produces the static bundle the image serves. To point the app at a backend on a
+different origin instead of proxying, set `API_BASE` in
+[`frontend/src/app/core/api-config.ts`](frontend/src/app/core/api-config.ts).
 
 ## Roadmap
 

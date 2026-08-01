@@ -1,0 +1,97 @@
+.topbar {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+  padding: 0.75rem 1.5rem;
+  background: var(--surface-1);
+  border-bottom: 1px solid var(--border);
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  flex-wrap: wrap;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.brand strong {
+  display: block;
+  line-height: 1.1;
+}
+
+.brand-sub {
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+
+.logo {
+  color: var(--accent);
+  font-size: 1.4rem;
+}
+
+.tabs {
+  display: flex;
+  gap: 0.25rem;
+}
+
+.tabs a {
+  padding: 0.45rem 1rem;
+  border-radius: var(--radius);
+  color: var(--muted);
+  text-decoration: none;
+  font-weight: 600;
+  font-size: 0.95rem;
+  transition:
+    background 0.15s ease,
+    color 0.15s ease;
+}
+
+.tabs a:hover {
+  background: var(--surface-2);
+  color: var(--text);
+}
+
+.tabs a.active {
+  background: var(--accent);
+  color: var(--accent-contrast);
+}
+
+.role {
+  margin-left: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.role span {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+
+.role input {
+  width: 12rem;
+}
+
+.content {
+  max-width: 860px;
+  margin: 0 auto;
+  padding: 2rem 1.5rem 4rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+@media (max-width: 620px) {
+  .role {
+    margin-left: 0;
+    width: 100%;
+  }
+  .role input {
+    width: 100%;
+  }
+}

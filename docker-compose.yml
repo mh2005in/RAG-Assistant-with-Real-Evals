@@ -30,6 +30,20 @@ services:
       OLLAMA_EMBED_MODEL: "${OLLAMA_EMBED_MODEL:-nomic-embed-text}"
     ports:
       - "${APP_PORT:-8000}:8000"
+
+  frontend:
+    # Nginx serving the compiled Angular SPA (see frontend/Dockerfile, build
+    # context ./frontend). It also reverse-proxies the API paths (/process,
+    # /evaluate, /retrieve, /answer) to the app service over the internal
+    # network, so the browser talks to one origin and no CORS config is needed.
+    build: ./frontend
+    container_name: rag-frontend
+    depends_on:
+      app:
+        condition: service_healthy
+    ports:
+      - "${FRONTEND_PORT:-4200}:80"
+
   db:
     # Postgres with the pgvector extension preinstalled (matches vector(768) in
     # backend/db/schema.sql). Pinned to a major version for reproducibility.
