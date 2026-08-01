@@ -1,0 +1,214 @@
+<section class="card">
+  <label class="field" style="margin-bottom: 0">
+    <span>
+      Access role
+      <span class="muted">— applies to uploads and evaluation (shared with the Ask tab)</span>
+    </span>
+    <input
+      type="text"
+      name="adminAccessRole"
+      [(ngModel)]="session.accessRole"
+      placeholder="e.g. public"
+    />
+  </label>
+</section>
+
+<section class="card">
+  <div class="card-head">
+    <h2>1 · Upload &amp; process</h2>
+    <p class="muted">
+      Upload a PDF. The backend chunks it with <em>every</em> strategy, embeds and
+      stores them all under the <strong>{{ session.accessRole || '—' }}</strong>
+      access role. Nothing is scored yet — that's step 2.
+    </p>
+  </div>
+
+  @if (!hasRole) {
+    <p class="muted lock-hint">
+      🔒 Set an access role above first — it determines who can read the uploaded
+      document.
+    </p>
+  }
+
+  <form (ngSubmit)="upload()">
+    <fieldset class="form-fieldset" [disabled]="!hasRole">
+      <label class="field">
+        <span>PDF file</span>
+        <input type="file" accept="application/pdf,.pdf" (change)="onFileSelected($event)" />
+      </label>
+
+      <label class="field">
+        <span>Document name</span>
+        <input type="text" name="docName" [(ngModel)]="docName" placeholder="e.g. Employee Handbook" />
+      </label>
+
+      <div class="field-row">
+        <label class="field">
+          <span>Chunk size <span class="muted">(words, optional)</span></span>
+          <input
+            type="number"
+            name="chunkSize"
+            min="1"
+            [(ngModel)]="chunkSize"
+            placeholder="default 200"
+          />
+        </label>
+
+        <label class="field">
+          <span>Exclude pages <span class="muted">(JSON, optional)</span></span>
+          <input
+            type="text"
+            name="excludePages"
+            [(ngModel)]="excludePages"
+            placeholder='e.g. [1, {"start": 10, "end": 12}]'
+          />
+        </label>
+      </div>
+
+      <button type="submit" class="primary" [disabled]="uploading">
+        {{ uploading ? 'Processing…' : 'Upload & process' }}
+      </button>
+    </fieldset>
+  </form>
+
+  @if (uploadError) {
+    <p class="error" role="alert">{{ uploadError }}</p>
+  }
+
+  @if (processResult) {
+    <div class="result">
+      @if (processResult.processed && processResult.document_id != null) {
+        <p class="ok">
+          Stored as document <strong>#{{ processResult.document_id }}</strong>
+          ({{ processResult.doc_type }}).
+        </p>
+        <table class="grid">
+          <thead>
+            <tr>
+              <th>Strategy</th>
+              <th class="num">Chunks</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (s of processResult.strategies; track s.strategy) {
+              <tr>
+                <td>{{ s.strategy }}</td>
+                <td class="num">{{ s.chunk_count }}</td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      } @else {
+        <p class="error">
+          Nothing was stored (doc type: {{ processResult.doc_type }}). Only PDFs are
+          processed.
+        </p>
+      }
+    </div>
+  }
+</section>
+
+<section class="card">
+  <div class="card-head">
+    <h2>2 · Evaluate strategies</h2>
+    <p class="muted">
+      Score a stored document's chunking strategies against labelled question /
+      expected-answer pairs. The winner's chunks are kept and the rest deleted, so
+      the document ends up on a single strategy.
+    </p>
+  </div>
+
+  @if (!canEvaluate) {
+    <p class="muted lock-hint">
+      🔒 Upload &amp; process a document above first — evaluation runs on what you
+      just stored, and its document id is filled in automatically.
+    </p>
+  }
+
+  <form (ngSubmit)="evaluate()">
+    <fieldset class="form-fieldset" [disabled]="!canEvaluate">
+      <div class="field-row">
+        <label class="field">
+          <span>Document id <span class="muted">(from upload)</span></span>
+          <input type="number" name="documentId" [(ngModel)]="documentId" readonly />
+        </label>
+        <label class="field">
+          <span>Top K <span class="muted">(chunks per question)</span></span>
+          <input type="number" name="evalTopK" min="1" max="100" [(ngModel)]="evalTopK" />
+        </label>
+      </div>
+
+      <div class="qa-head">
+      <span>Question / expected-answer pairs</span>
+      <button type="button" class="ghost-btn" (click)="addPair()">+ Add pair</button>
+    </div>
+
+    @for (pair of qaPairs; track $index) {
+      <div class="qa-pair">
+        <span class="qa-index">{{ $index + 1 }}</span>
+        <div class="qa-fields">
+          <input
+            type="text"
+            [name]="'question' + $index"
+            [(ngModel)]="pair.question"
+            placeholder="Question"
+          />
+          <input
+            type="text"
+            [name]="'answer' + $index"
+            [(ngModel)]="pair.answer"
+            placeholder="Expected answer"
+          />
+        </div>
+        <button
+          type="button"
+          class="icon-btn"
+          aria-label="Remove pair"
+          (click)="removePair($index)"
+        >
+          ×
+        </button>
+      </div>
+    }
+
+      <button type="submit" class="primary" [disabled]="evaluating">
+        {{ evaluating ? 'Evaluating…' : 'Evaluate' }}
+      </button>
+    </fieldset>
+  </form>
+
+  @if (evalError) {
+    <p class="error" role="alert">{{ evalError }}</p>
+  }
+
+  @if (evalResult) {
+    <div class="result">
+      <p class="ok">
+        Winner for document <strong>#{{ evalResult.document_id }}</strong>:
+        <span class="tag">{{ evalResult.chunking_strategy ?? 'none' }}</span>
+      </p>
+      <table class="grid">
+        <thead>
+          <tr>
+            <th>Strategy</th>
+            <th class="num">Questions</th>
+            <th class="num">Answer similarity</th>
+            <th class="num">Hit rate</th>
+            <th>Kept</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (e of evalResult.evaluations; track e.strategy) {
+            <tr [class.selected]="e.selected">
+              <td>{{ e.strategy }}</td>
+              <td class="num">{{ e.questions }}</td>
+              <td class="num">{{ e.answer_similarity | number: '1.3-3' }}</td>
+              <td class="num">{{ e.hit_rate | percent: '1.0-0' }}</td>
+              <td>{{ e.selected ? '✓' : '' }}</td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  }
+</section>

@@ -1,0 +1,63 @@
+.qa-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: 0.5rem 0 0.75rem;
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+.qa-pair {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin-bottom: 0.6rem;
+}
+
+.qa-index {
+  flex: 0 0 auto;
+  width: 1.6rem;
+  height: 1.6rem;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--surface-2);
+  color: var(--muted);
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.qa-fields {
+  flex: 1;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.6rem;
+}
+
+@media (max-width: 560px) {
+  .qa-fields {
+    grid-template-columns: 1fr;
+  }
+}
+
+tr.selected {
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  font-weight: 600;
+}
+
+/* Strip the native fieldset chrome so it is just a disable-group wrapper. */
+.form-fieldset {
+  border: 0;
+  margin: 0;
+  padding: 0;
+  min-width: 0;
+}
+
+/* Dim the whole evaluate form while it is locked (no processed document yet). */
+.form-fieldset:disabled {
+  opacity: 0.55;
+}
+
+.lock-hint {
+  margin: 0 0 1rem;
+}

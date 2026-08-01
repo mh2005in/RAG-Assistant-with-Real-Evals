@@ -1,0 +1,6 @@
+{
+  "/process": { "target": "http://localhost:8000", "secure": false, "changeOrigin": true },
+  "/evaluate": { "target": "http://localhost:8000", "secure": false, "changeOrigin": true },
+  "/retrieve": { "target": "http://localhost:8000", "secure": false, "changeOrigin": true },
+  "/answer": { "target": "http://localhost:8000", "secure": false, "changeOrigin": true }
+}

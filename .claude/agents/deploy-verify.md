@@ -2,10 +2,11 @@
 name: deploy-verify
 description: >-
   Verify the Docker Compose stack still builds, comes up healthy, and serves the
-  API. Use after a change that could affect the deployable stack — the Dockerfile,
-  docker-compose.yml, backend dependencies (pyproject.toml / uv.lock), env config
-  (.env.example), the DB schema, or backend app code. Not needed for docs-only or
-  test-only edits. Reports a concise pass/fail with logs on failure.
+  API. Use after a change that could affect the deployable stack — a Dockerfile
+  (backend or frontend), the frontend nginx config, docker-compose.yml, backend
+  dependencies (pyproject.toml / uv.lock), env config (.env.example), the DB
+  schema, or backend/frontend app code. Not needed for docs-only or test-only
+  edits. Reports a concise pass/fail with logs on failure.
 tools: Bash, Read, Glob, Grep
 model: claude-sonnet-5
 ---
@@ -19,6 +20,10 @@ and stop, leaving the fix to the caller.
 Run everything from the repo root (where `docker-compose.yml` lives). Services and
 their fixed container names (from `docker-compose.yml`):
 
+- `frontend` → container `rag-frontend` — nginx serving the built Angular SPA,
+  build context `./frontend`, published on `http://localhost:${FRONTEND_PORT:-4200}`.
+  It reverse-proxies the API paths to `app:8000`. Its Dockerfile HEALTHCHECK passes
+  once nginx serves `/`. Depends on `app` being healthy.
 - `app` → container `rag-app` — the FastAPI service, build context `./backend`,
   published on `http://localhost:${APP_PORT:-8000}`. Its Dockerfile HEALTHCHECK
   passes once `GET /openapi.json` succeeds.
@@ -38,27 +43,31 @@ their fixed container names (from `docker-compose.yml`):
    timeout (e.g. 600000 ms). Later runs are much faster (layer cache + persisted
    model volume).
 
-3. **Wait for health.** Poll until `rag-postgres`, `rag-ollama`, and `rag-app` all
-   report `healthy`, or until a ~5-minute budget elapses. Do not sleep blindly in
-   the foreground; poll with a bounded loop, e.g.:
+3. **Wait for health.** Poll until `rag-postgres`, `rag-ollama`, `rag-app`, and
+   `rag-frontend` all report `healthy`, or until a ~5-minute budget elapses. The
+   frontend only goes healthy after `app` does (it `depends_on` app healthy). Do
+   not sleep blindly in the foreground; poll with a bounded loop, e.g.:
 
    ```bash
    for i in $(seq 1 60); do
      app=$(docker inspect --format '{{.State.Health.Status}}' rag-app 2>/dev/null)
      db=$(docker inspect --format '{{.State.Health.Status}}' rag-postgres 2>/dev/null)
      oll=$(docker inspect --format '{{.State.Health.Status}}' rag-ollama 2>/dev/null)
-     echo "app=$app db=$db ollama=$oll"
-     [ "$app" = healthy ] && [ "$db" = healthy ] && [ "$oll" = healthy ] && break
+     fe=$(docker inspect --format '{{.State.Health.Status}}' rag-frontend 2>/dev/null)
+     echo "app=$app db=$db ollama=$oll frontend=$fe"
+     [ "$app" = healthy ] && [ "$db" = healthy ] && [ "$oll" = healthy ] && [ "$fe" = healthy ] && break
      sleep 5
    done
    ```
 
    Also confirm `ollama-pull` exited 0 (`docker inspect --format '{{.State.ExitCode}}' $(docker compose ps -aq ollama-pull)`) — a non-zero exit means a model failed to pull.
 
-4. **Exercise the API from the host.** Confirm the app actually serves, not just
-   that the container is up:
+4. **Exercise the stack from the host.** Confirm the services actually serve, not
+   just that the containers are up:
    - `curl -fsS http://localhost:${APP_PORT:-8000}/openapi.json` returns 200.
    - Optionally `GET /docs` returns 200.
+   - `curl -fsS http://localhost:${FRONTEND_PORT:-4200}/` returns 200 (the SPA
+     shell). This confirms nginx serves the built frontend.
 
 5. **On any failure**, capture evidence for the failing service only and stop:
    `docker compose ps` plus `docker compose logs --tail=80 <service>` (e.g. `app`).
@@ -81,7 +90,8 @@ requested.
 
 End with a compact verdict the caller can act on:
 
-- **PASS** — one line per service (`rag-app`, `rag-postgres`, `rag-ollama`:
-  healthy), the `/openapi.json` status, total time, and that the stack is left up.
+- **PASS** — one line per service (`rag-frontend`, `rag-app`, `rag-postgres`,
+  `rag-ollama`: healthy), the `/openapi.json` and frontend `/` status, total time,
+  and that the stack is left up.
 - **FAIL** — which step failed, the service, and the key log lines. Be specific
   enough that the caller can fix it without re-running the stack themselves.
