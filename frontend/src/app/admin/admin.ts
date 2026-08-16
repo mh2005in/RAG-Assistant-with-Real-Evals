@@ -3,7 +3,12 @@ import { Component, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 
 import { ApiService } from '../core/api.service';
-import { EvaluateResponse, ProcessResponse, QAPair } from '../core/models';
+import {
+  EvaluateResponse,
+  ProcessResponse,
+  QAPair,
+  StructuralChunkingOptions,
+} from '../core/models';
 import { SessionService } from '../core/session.service';
 
 /**
@@ -30,6 +35,10 @@ export class Admin {
   docName = '';
   chunkSize: number | null = null;
   excludePages = '';
+  // Structural strategy tuning: one regex per line, plus its section bounds.
+  headingPatterns = '';
+  minWords: number | null = null;
+  maxWords: number | null = null;
 
   uploading = false;
   uploadError = '';
@@ -58,6 +67,34 @@ export class Admin {
    */
   get canEvaluate(): boolean {
     return this.processResult?.processed === true && this.processResult.document_id != null;
+  }
+
+  /**
+   * The structural options to send, or null when every one was left blank — the
+   * backend then uses the strategy's built-in markers and bounds.
+   *
+   * The patterns are Python regexes (one per line) and are passed through
+   * untouched: JavaScript's regex dialect differs — inline flags like `(?i)` are
+   * a syntax error here but valid there — so validating them in the browser
+   * would reject patterns the backend accepts. It reports a bad one as a 422.
+   */
+  private structuralOptions(): StructuralChunkingOptions | null {
+    const patterns = this.headingPatterns
+      .split(/\r?\n/)
+      .map((pattern) => pattern.trim())
+      .filter((pattern) => pattern.length > 0);
+
+    const options: StructuralChunkingOptions = {};
+    if (patterns.length > 0) {
+      options.heading_patterns = patterns;
+    }
+    if (this.minWords != null) {
+      options.min_words = this.minWords;
+    }
+    if (this.maxWords != null) {
+      options.max_words = this.maxWords;
+    }
+    return Object.keys(options).length > 0 ? options : null;
   }
 
   onFileSelected(event: Event): void {
@@ -90,7 +127,14 @@ export class Admin {
     this.processResult = null;
 
     this.api
-      .process(this.file, name, accessRole, this.chunkSize, this.excludePages.trim() || null)
+      .process(
+        this.file,
+        name,
+        accessRole,
+        this.chunkSize,
+        this.excludePages.trim() || null,
+        this.structuralOptions(),
+      )
       .subscribe({
         next: (res) => {
           this.processResult = res;

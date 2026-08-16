@@ -18,16 +18,15 @@
   <div class="card-head">
     <h2>1 · Upload &amp; process</h2>
     <p class="muted">
-      Upload a PDF. The backend chunks it with <em>every</em> strategy, embeds and
-      stores them all under the <strong>{{ session.accessRole || '—' }}</strong>
+      Upload a PDF. The backend chunks it with <em>every</em> strategy, embeds and stores them all
+      under the <strong>{{ session.accessRole || '—' }}</strong>
       access role. Nothing is scored yet — that's step 2.
     </p>
   </div>
 
   @if (!hasRole) {
     <p class="muted lock-hint">
-      🔒 Set an access role above first — it determines who can read the uploaded
-      document.
+      🔒 Set an access role above first — it determines who can read the uploaded document.
     </p>
   }
 
@@ -40,7 +39,12 @@
 
       <label class="field">
         <span>Document name</span>
-        <input type="text" name="docName" [(ngModel)]="docName" placeholder="e.g. Employee Handbook" />
+        <input
+          type="text"
+          name="docName"
+          [(ngModel)]="docName"
+          placeholder="e.g. Employee Handbook"
+        />
       </label>
 
       <div class="field-row">
@@ -66,6 +70,48 @@
         </label>
       </div>
 
+      <label class="field">
+        <span>
+          Section patterns
+          <span class="muted">
+            — regex, one per line. Tunes the <strong>structural</strong> strategy only: these
+            replace its built-in markers (markdown headings, numbered sections, ALL-CAPS titles).
+            Leave empty to keep them.
+          </span>
+        </span>
+        <textarea
+          name="headingPatterns"
+          rows="3"
+          data-testid="heading-patterns"
+          [(ngModel)]="headingPatterns"
+          placeholder="e.g. ^Clause \d+&#10;^Schedule [A-Z]\b"
+        ></textarea>
+      </label>
+
+      <div class="field-row">
+        <label class="field">
+          <span>Section min words <span class="muted">(optional)</span></span>
+          <input
+            type="number"
+            name="minWords"
+            min="0"
+            [(ngModel)]="minWords"
+            placeholder="default 25 — shorter sections merge on"
+          />
+        </label>
+
+        <label class="field">
+          <span>Section max words <span class="muted">(optional)</span></span>
+          <input
+            type="number"
+            name="maxWords"
+            min="1"
+            [(ngModel)]="maxWords"
+            placeholder="default 400 — longer sections split"
+          />
+        </label>
+      </div>
+
       <button type="submit" class="primary" [disabled]="uploading">
         {{ uploading ? 'Processing…' : 'Upload & process' }}
       </button>
@@ -80,8 +126,9 @@
     <div class="result">
       @if (processResult.processed && processResult.document_id != null) {
         <p class="ok">
-          Stored as document <strong>#{{ processResult.document_id }}</strong>
-          ({{ processResult.doc_type }}).
+          Stored as document <strong>#{{ processResult.document_id }}</strong> ({{
+            processResult.doc_type
+          }}).
         </p>
         <table class="grid">
           <thead>
@@ -101,8 +148,7 @@
         </table>
       } @else {
         <p class="error">
-          Nothing was stored (doc type: {{ processResult.doc_type }}). Only PDFs are
-          processed.
+          Nothing was stored (doc type: {{ processResult.doc_type }}). Only PDFs are processed.
         </p>
       }
     </div>
@@ -113,16 +159,16 @@
   <div class="card-head">
     <h2>2 · Evaluate strategies</h2>
     <p class="muted">
-      Score a stored document's chunking strategies against labelled question /
-      expected-answer pairs. The winner's chunks are kept and the rest deleted, so
-      the document ends up on a single strategy.
+      Score a stored document's chunking strategies against labelled question / expected-answer
+      pairs. The winner's chunks are kept and the rest deleted, so the document ends up on a single
+      strategy.
     </p>
   </div>
 
   @if (!canEvaluate) {
     <p class="muted lock-hint">
-      🔒 Upload &amp; process a document above first — evaluation runs on what you
-      just stored, and its document id is filled in automatically.
+      🔒 Upload &amp; process a document above first — evaluation runs on what you just stored, and
+      its document id is filled in automatically.
     </p>
   }
 
@@ -140,37 +186,37 @@
       </div>
 
       <div class="qa-head">
-      <span>Question / expected-answer pairs</span>
-      <button type="button" class="ghost-btn" (click)="addPair()">+ Add pair</button>
-    </div>
-
-    @for (pair of qaPairs; track $index) {
-      <div class="qa-pair">
-        <span class="qa-index">{{ $index + 1 }}</span>
-        <div class="qa-fields">
-          <input
-            type="text"
-            [name]="'question' + $index"
-            [(ngModel)]="pair.question"
-            placeholder="Question"
-          />
-          <input
-            type="text"
-            [name]="'answer' + $index"
-            [(ngModel)]="pair.answer"
-            placeholder="Expected answer"
-          />
-        </div>
-        <button
-          type="button"
-          class="icon-btn"
-          aria-label="Remove pair"
-          (click)="removePair($index)"
-        >
-          ×
-        </button>
+        <span>Question / expected-answer pairs</span>
+        <button type="button" class="ghost-btn" (click)="addPair()">+ Add pair</button>
       </div>
-    }
+
+      @for (pair of qaPairs; track $index) {
+        <div class="qa-pair">
+          <span class="qa-index">{{ $index + 1 }}</span>
+          <div class="qa-fields">
+            <input
+              type="text"
+              [name]="'question' + $index"
+              [(ngModel)]="pair.question"
+              placeholder="Question"
+            />
+            <input
+              type="text"
+              [name]="'answer' + $index"
+              [(ngModel)]="pair.answer"
+              placeholder="Expected answer"
+            />
+          </div>
+          <button
+            type="button"
+            class="icon-btn"
+            aria-label="Remove pair"
+            (click)="removePair($index)"
+          >
+            ×
+          </button>
+        </div>
+      }
 
       <button type="submit" class="primary" [disabled]="evaluating">
         {{ evaluating ? 'Evaluating…' : 'Evaluate' }}
@@ -185,7 +231,8 @@
   @if (evalResult) {
     <div class="result">
       <p class="ok">
-        Winner for document <strong>#{{ evalResult.document_id }}</strong>:
+        Winner for document <strong>#{{ evalResult.document_id }}</strong
+        >:
         <span class="tag">{{ evalResult.chunking_strategy ?? 'none' }}</span>
       </p>
       <table class="grid">

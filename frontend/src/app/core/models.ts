@@ -6,12 +6,7 @@
  */
 
 /** Chunking strategies under evaluation (backend ChunkingStrategy enum). */
-export type ChunkingStrategy =
-  | 'fixed'
-  | 'semantic'
-  | 'structural'
-  | 'recursive'
-  | 'llm';
+export type ChunkingStrategy = 'fixed' | 'semantic' | 'structural' | 'recursive' | 'llm';
 
 export const CHUNKING_STRATEGIES: ChunkingStrategy[] = [
   'fixed',
@@ -25,6 +20,17 @@ export const CHUNKING_STRATEGIES: ChunkingStrategy[] = [
 export type DocType = 'pdf' | 'unknown';
 
 // --- /process ---------------------------------------------------------------
+
+/**
+ * Optional tuning for the structural strategy (backend StructuralChunkingRequest),
+ * sent as the JSON `structural` form field. Omitted keys keep the backend's
+ * built-in markers and size bounds.
+ */
+export interface StructuralChunkingOptions {
+  heading_patterns?: string[];
+  min_words?: number;
+  max_words?: number;
+}
 
 export interface StoredStrategy {
   strategy: string;

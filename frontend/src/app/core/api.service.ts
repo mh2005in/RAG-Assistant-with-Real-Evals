@@ -11,6 +11,7 @@ import {
   ProcessResponse,
   RetrievalRequest,
   RetrievalResponse,
+  StructuralChunkingOptions,
 } from './models';
 
 /** Typed client for the RAG backend endpoints (backend/api.py). */
@@ -29,6 +30,7 @@ export class ApiService {
     accessRole: string,
     chunkSize?: number | null,
     excludePages?: string | null,
+    structural?: StructuralChunkingOptions | null,
   ): Observable<ProcessResponse> {
     const form = new FormData();
     form.append('file', file);
@@ -39,6 +41,9 @@ export class ApiService {
     }
     if (excludePages) {
       form.append('exclude_pages', excludePages);
+    }
+    if (structural) {
+      form.append('structural', JSON.stringify(structural));
     }
     return this.http.post<ProcessResponse>(`${this.base}/process`, form);
   }
