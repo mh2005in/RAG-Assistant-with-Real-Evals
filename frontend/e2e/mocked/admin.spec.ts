@@ -17,6 +17,65 @@ test.describe('Admin tab (mocked backend)', () => {
     await expect(uploadBtn).toBeEnabled();
   });
 
+  test('structural options are sent as the JSON structural field', async ({ page }) => {
+    let body = '';
+    await page.route('**/process', async (route: Route) => {
+      body = route.request().postData() ?? '';
+      await route.fulfill({
+        json: {
+          processed: true,
+          doc_type: 'pdf',
+          document_id: 7,
+          strategies: [{ strategy: 'structural', chunk_count: 11 }],
+        },
+      });
+    });
+
+    await page.goto('/admin');
+    await page.getByLabel('Document name').fill('Contract');
+    await page.setInputFiles('input[type=file]', {
+      name: 'contract.pdf',
+      mimeType: 'application/pdf',
+      buffer: Buffer.from('%PDF-1.4 mock'),
+    });
+    // One regex per line, and only the bound that was filled in.
+    await page.getByTestId('heading-patterns').fill('^Clause \\d+\n^Schedule [A-Z]');
+    await page.locator('input[name=maxWords]').fill('300');
+    await page.getByRole('button', { name: /Upload & process/ }).click();
+
+    await expect(page.getByText(/Stored as document #7/)).toBeVisible();
+    expect(body).toContain('name="structural"');
+    expect(body).toContain(
+      JSON.stringify({
+        heading_patterns: ['^Clause \\d+', '^Schedule [A-Z]'],
+        max_words: 300,
+      }),
+    );
+  });
+
+  test('no structural field is sent when the options are left blank', async ({ page }) => {
+    let body = '';
+    await page.route('**/process', async (route: Route) => {
+      body = route.request().postData() ?? '';
+      await route.fulfill({
+        json: { processed: true, doc_type: 'pdf', document_id: 8, strategies: [] },
+      });
+    });
+
+    await page.goto('/admin');
+    await page.getByLabel('Document name').fill('Handbook');
+    await page.setInputFiles('input[type=file]', {
+      name: 'handbook.pdf',
+      mimeType: 'application/pdf',
+      buffer: Buffer.from('%PDF-1.4 mock'),
+    });
+    await page.getByRole('button', { name: /Upload & process/ }).click();
+
+    await expect(page.getByText(/Stored as document #8/)).toBeVisible();
+    // The backend then uses the strategy's built-in markers and bounds.
+    expect(body).not.toContain('name="structural"');
+  });
+
   test('evaluate is gated on a processed document, then pre-filled from it', async ({ page }) => {
     await page.route('**/process', async (route: Route) => {
       await route.fulfill({
@@ -27,6 +86,7 @@ test.describe('Admin tab (mocked backend)', () => {
           strategies: [
             { strategy: 'fixed', chunk_count: 10 },
             { strategy: 'semantic', chunk_count: 8 },
+            { strategy: 'structural', chunk_count: 11 },
           ],
         },
       });
@@ -37,8 +97,20 @@ test.describe('Admin tab (mocked backend)', () => {
           document_id: 42,
           chunking_strategy: 'semantic',
           evaluations: [
-            { strategy: 'semantic', questions: 1, answer_similarity: 0.8, hit_rate: 1, selected: true },
-            { strategy: 'fixed', questions: 1, answer_similarity: 0.6, hit_rate: 0, selected: false },
+            {
+              strategy: 'semantic',
+              questions: 1,
+              answer_similarity: 0.8,
+              hit_rate: 1,
+              selected: true,
+            },
+            {
+              strategy: 'fixed',
+              questions: 1,
+              answer_similarity: 0.6,
+              hit_rate: 0,
+              selected: false,
+            },
           ],
         },
       });

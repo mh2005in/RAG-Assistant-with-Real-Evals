@@ -1,0 +1,77 @@
+# Ingestion Handbook
+
+This handbook describes how a document travels through the ingestion pipeline,
+from the moment it is uploaded to the moment its vectors are searchable. Each
+section covers one stage and can be read on its own.
+
+## 1. Extraction
+
+Extraction turns a binary document into plain text the rest of the pipeline can
+work with. A PDF is opened page by page, and the text of each page is kept
+separately so that every downstream chunk can still say which page it came from.
+Pages that carry no useful text, such as scanned covers or blank separators, are
+excluded before anything else runs.
+
+1.1 Page exclusion
+
+Exclusion blanks a page rather than dropping it. Keeping the position means the
+pages that follow retain their original numbers, so a citation still points at
+the page a reader would turn to. Because exclusion happens before chunking, it
+behaves identically for every chunking strategy.
+
+1.2 Failure modes
+
+A file that is not a readable document is rejected outright instead of being
+silently stored as empty text. Encrypted files, truncated downloads and files
+that merely claim to be PDFs all fail here, which keeps unusable content out of
+the vector store.
+
+
+## 2. Chunking
+
+Chunking decides what the retriever will eventually be able to find. A chunk that
+is too large dilutes the signal and wastes the context window; one that is too
+small fractures an idea across a boundary and strands the half a reader needs.
+No single strategy wins on every document, which is why several run side by side
+and are compared on the same text.
+
+2.1 Fixed size
+
+The fixed-size strategy slices the text stream into windows of a set number of
+words. It ignores sentences, paragraphs and sections entirely. Its virtue is
+predictability, and that makes it an honest baseline for anything more clever to
+beat.
+
+2.2 Structure aware
+
+A structure-aware strategy looks for the markers a document already carries:
+headings, numbered sections, labelled clauses. Where those markers exist, they
+are the author's own statement of where one idea ends and the next begins, and
+splitting there costs nothing to compute.
+
+2.3 Semantic
+
+The semantic strategy embeds each sentence and breaks where consecutive
+sentences drift apart in meaning. It finds topic changes that no markup records,
+at the cost of an extra embedding pass over the whole document.
+
+
+## 3. Embedding And Storage
+
+Every chunk is embedded into a fixed-length vector and written to the store with
+the identifier of the document it came from, the strategy that produced it and
+its position in that strategy's sequence. Chunks are written one at a time as
+they are produced, so a large document never holds all of its chunks in memory.
+
+3.1 Access control
+
+Each document carries an access role, and every search is filtered by it. A chunk
+is only ever returned to a caller whose role matches the document it belongs to,
+so access is enforced in the query rather than after the results come back.
+
+APPENDIX A: GLOSSARY
+
+A chunk is a contiguous span of text treated as one retrievable unit. An
+embedding is the vector a model produces for a span of text, positioned so that
+related spans sit close together. Recall is the share of the passages that should
+have been retrieved for a question that actually were.

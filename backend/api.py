@@ -16,6 +16,7 @@ from dtos.requests import (
     FixedSizeChunkingRequest,
     PageExclusion,
     RetrievalRequest,
+    StructuralChunkingRequest,
 )
 from dtos.responses import (
     AnswerResponse,
@@ -97,6 +98,15 @@ async def process(
             "Optional, and applies to every chunking strategy."
         ),
     ),
+    structural: str | None = Form(
+        None,
+        description=(
+            "JSON object tuning the structural candidate: heading_patterns "
+            "(regexes marking a new section), min_words, max_words (e.g. "
+            '{"heading_patterns": ["^Clause \\\\d+"], "max_words": 300}). '
+            "Optional; omit to use the strategy's built-in markers and bounds."
+        ),
+    ),
     storage: PostgresStorage = Depends(get_storage),
 ) -> ProcessResponse:
     """Chunk a file every way, embed, and store them all.
@@ -122,13 +132,25 @@ async def process(
                 status_code=422, detail=_validation_detail("exclude_pages", exc)
             ) from exc
 
+    structural_request: StructuralChunkingRequest | None = None
+    if structural is not None:
+        try:
+            structural_request = StructuralChunkingRequest.model_validate_json(
+                structural
+            )
+        except ValidationError as exc:
+            raise HTTPException(
+                status_code=422, detail=_validation_detail("structural", exc)
+            ) from exc
+
     content = await file.read()
     return file_processing.process(
         content,
         name,
         access_role,
-        fixed_request,
-        exclusion,
+        fixed_size=fixed_request,
+        page_exclusion=exclusion,
+        structural=structural_request,
         filename=file.filename,
         content_type=file.content_type,
         storage=storage,

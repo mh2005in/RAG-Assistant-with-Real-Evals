@@ -21,7 +21,7 @@ flowchart LR
     subgraph ingest["POST /process"]
       direction TB
       U["PDF upload"] --> EX["Extract text<br/>(PyMuPDF)"]
-      EX --> CH["Chunk every strategy<br/>(fixed-size, semantic)"]
+      EX --> CH["Chunk every strategy<br/>(fixed-size, semantic, structural)"]
       CH --> EM1["Embed<br/>(Ollama)"]
       EM1 --> ST[("PostgreSQL + pgvector<br/>documents, chunks")]
     end
@@ -121,7 +121,8 @@ curl -X POST http://localhost:8000/process \
 # -> { "processed": true, "doc_type": "pdf", "document_id": 1,
 #      "strategies": [                           # what was stored, unscored
 #        {"strategy": "fixed", "chunk_count": 18},
-#        {"strategy": "semantic", "chunk_count": 12}
+#        {"strategy": "semantic", "chunk_count": 12},
+#        {"strategy": "structural", "chunk_count": 15}
 #      ] }
 ```
 
@@ -134,10 +135,29 @@ The response reports **what was stored** — the strategies and their chunk coun
 not the chunks themselves. Read the stored chunks back through `/retrieve`, and
 compare the strategies with `/evaluate`.
 
+The strategies that run:
+
+- **fixed-size** — windows of `chunk_size` words, ignoring every boundary. The
+  structure-blind baseline the others have to beat.
+- **semantic** — embeds each sentence and breaks where consecutive sentences drift
+  apart in meaning, so boundaries land on topic shifts that nothing marks up.
+- **structural** — breaks on the markers a document already carries, matched by
+  regex over line starts: markdown headings, numbered sections (`1.`, `3.2.1`),
+  `Chapter`/`Section`/`Appendix` labels, roman/lettered items and ALL-CAPS title
+  lines. Needs no embeddings. A document with no markers at all falls back to
+  paragraph boundaries, and sections are bounded either side: a very short one
+  (a bare heading) merges into the next, an over-long one splits at paragraph,
+  then sentence, then word boundaries.
+
 The remaining inputs:
 
 - **`chunk_size`** — optional positive integer, tuning only the **fixed-size**
   candidate (default 200 words). Other strategies choose their own boundaries.
+- **`structural`** — optional JSON **object** tuning only the **structural**
+  candidate: `heading_patterns` (regexes replacing the built-in markers),
+  `min_words` (default 25) and `max_words` (default 400), e.g.
+  `-F 'structural={"heading_patterns": ["^Clause \\d+"], "max_words": 300}'`. A
+  pattern that does not compile is a 422.
 - **`exclude_pages`** — optional and **strategy-agnostic**: a JSON **array** of
   page numbers and/or inclusive ranges, e.g. `[1, {"start": 10, "end": 12}]`.
   Applied to the extracted pages before any chunking, so it works the same for
@@ -289,12 +309,12 @@ backend/                   the Python/RAG service (run uv commands from here)
     evaluation.py          /evaluate: retrieve per strategy vs Q&A → rank → keep the best
     retrieval.py           /retrieve: embed query → similarity search
     answering.py           /answer: retrieve → augment prompt → generate
-    chunking/              Chunker interface + fixed-size and semantic strategies
+    chunking/              Chunker interface + fixed-size, semantic, structural
     embedding/             Embedder interface + Ollama backend
     generation/            LLMClient interface + Ollama backend
     storage/               PostgresStorage (pgvector reads/writes)
   db/schema.sql            documents + chunks tables, FK + HNSW cosine index
-  evals/                   reproducible evals (chunking strategy comparison)
+  evals/                   reproducible evals (chunking strategy comparison, flat + structured samples)
   tests/                   pytest: fast offline units + DB integration (marked)
   Dockerfile               app image (uv, uvicorn)
   pyproject.toml, uv.lock  dependencies + pinned lockfile
@@ -356,8 +376,20 @@ comparison embeds sentences, so it needs the Ollama service running (run from
 
 ```bash
 uv run python -m evals.fixed_size_chunking_eval    # fixed-size baseline sweep
-uv run python -m evals.chunking_strategies_eval   # fixed vs semantic, same document
+uv run python -m evals.chunking_strategies_eval    # fixed vs semantic vs structural
 ```
+
+The comparison runs every strategy over two documents — flat prose
+(`evals/data/sample.txt`) and one that marks up its own structure
+(`evals/data/structured_sample.txt`) — and reports, next to the size
+distribution, the label-free cohesion/separation score from
+`services/chunking/coherence.py` (higher is better). On the structured document
+the structural strategy scores best (`-0.18` vs `-0.31` semantic and `-0.31` to
+`-0.38` fixed-size): it is both the most internally coherent and the most
+distinct from its neighbours. On the flat document it has no markers to find,
+falls back to paragraphs and lands with the rest (`-0.21`, against `-0.20`
+semantic) — a structure-aware strategy is only as good as the structure it is
+given.
 
 **Pre-commit hook:** a gitleaks secret scan runs on commit. Enable the repo's
 hooks in a fresh clone with `git config core.hooksPath .githooks` (requires
@@ -374,7 +406,8 @@ A single-page [Angular 20](https://angular.dev) app (standalone components) in
   (`POST /retrieve`, the raw ranked chunks). Optional top-K and chunking-strategy
   filter.
 - **Admin** (`/admin`) — for maintainers. **Upload &amp; process** a PDF
-  (`POST /process`, with optional chunk size and page exclusions) and then
+  (`POST /process`, with optional chunk size, page exclusions, and structural
+  section patterns — one regex per line — plus their word bounds) and then
   **Evaluate** the stored strategies (`POST /evaluate`) against a list of
   question / expected-answer pairs; the upload pre-fills the document id, and the
   result table shows each strategy's answer similarity, hit rate, and which one
@@ -420,9 +453,9 @@ under `npm test` (karma).
 
 Planned but **not yet implemented**:
 
-- **More chunking strategies** — structural, recursive, and LLM-based, each
-  behind the existing `Chunker` interface so they plug into the same pipeline as
-  the fixed-size and semantic strategies.
+- **More chunking strategies** — recursive and LLM-based, each behind the existing
+  `Chunker` interface so they plug into the same pipeline as the fixed-size,
+  semantic and structural strategies.
 - **Richer retrieval metrics** — `/evaluate` already ranks strategies by a labelled
   retrieval eval (answer-match similarity over caller-supplied Q&A). A natural next
   step is standard rank-aware metrics (recall@k / MRR / nDCG) over the same labelled

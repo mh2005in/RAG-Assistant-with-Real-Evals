@@ -16,12 +16,18 @@ apples-to-apples.
 
 import pymupdf
 
-from dtos.requests import ChunkingStrategy, FixedSizeChunkingRequest, PageExclusion
+from dtos.requests import (
+    ChunkingStrategy,
+    FixedSizeChunkingRequest,
+    PageExclusion,
+    StructuralChunkingRequest,
+)
 from dtos.responses import Chunk, DocType, ProcessResponse, StoredStrategy
 from services.chunking import (
     Chunker,
     FixedSizeChunker,
     SemanticChunker,
+    StructuralChunker,
 )
 from services.embedding import Embedder, OllamaEmbedder
 from services.storage import PostgresStorage
@@ -104,12 +110,15 @@ class FileProcessing:
         ]
 
     def _candidates(
-        self, fixed_size: FixedSizeChunkingRequest
+        self,
+        fixed_size: FixedSizeChunkingRequest,
+        structural: StructuralChunkingRequest,
     ) -> dict[ChunkingStrategy, Chunker]:
         """The chunking strategies competing for this document."""
         return {
             ChunkingStrategy.fixed: FixedSizeChunker(fixed_size),
             ChunkingStrategy.semantic: SemanticChunker(self._get_embedder()),
+            ChunkingStrategy.structural: StructuralChunker(structural),
         }
 
     def process(
@@ -119,6 +128,7 @@ class FileProcessing:
         access_role: str,
         fixed_size: FixedSizeChunkingRequest | None = None,
         page_exclusion: PageExclusion | None = None,
+        structural: StructuralChunkingRequest | None = None,
         filename: str | None = None,
         content_type: str | None = None,
         storage: PostgresStorage | None = None,
@@ -135,9 +145,10 @@ class FileProcessing:
         scored later without re-chunking.
 
         ``fixed_size`` tunes the fixed-size candidate (defaulting to
-        ``_DEFAULT_CHUNK_SIZE`` words); ``page_exclusion`` is strategy-agnostic and
-        is applied before any chunking. The response reports which strategies were
-        stored and their chunk counts.
+        ``_DEFAULT_CHUNK_SIZE`` words) and ``structural`` the structural one (its
+        heading patterns and size bounds); both fall back to their defaults.
+        ``page_exclusion`` is strategy-agnostic and is applied before any chunking.
+        The response reports which strategies were stored and their chunk counts.
         """
         doc_type = self._detect_doc_type(
             content, filename=filename, content_type=content_type
@@ -149,6 +160,7 @@ class FileProcessing:
         fixed_size = fixed_size or FixedSizeChunkingRequest(
             chunk_size=_DEFAULT_CHUNK_SIZE
         )
+        structural = structural or StructuralChunkingRequest()
 
         # Chunk, embed and persist one chunk at a time, for every strategy. Each
         # chunk is stored the moment it is created and embedded, so only a single
@@ -158,7 +170,7 @@ class FileProcessing:
         embedder = self._get_embedder()
         document_id: int | None = None
         strategies: list[StoredStrategy] = []
-        for strategy, chunker in self._candidates(fixed_size).items():
+        for strategy, chunker in self._candidates(fixed_size, structural).items():
             chunk_count = 0
             for page, text in chunker.chunk_with_pages(pages):
                 chunk = embedder.embed_chunks([Chunk.from_page(page, text)])[0]

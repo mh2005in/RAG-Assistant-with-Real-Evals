@@ -5,7 +5,11 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from dtos.requests import FixedSizeChunkingRequest, PageExclusion
+from dtos.requests import (
+    FixedSizeChunkingRequest,
+    PageExclusion,
+    StructuralChunkingRequest,
+)
 from dtos.responses import Chunk, DocType
 from services.file_processing import FileProcessing
 
@@ -125,9 +129,13 @@ class TestProcess:
         assert response.processed is True
         assert response.doc_type is DocType.pdf
 
-        # Both implemented strategies were chunked and reported, each with a
+        # Every implemented strategy was chunked and reported, each with a
         # positive chunk count. No winner is chosen here (that is /evaluate's job).
-        assert {item.strategy for item in response.strategies} == {"fixed", "semantic"}
+        assert {item.strategy for item in response.strategies} == {
+            "fixed",
+            "semantic",
+            "structural",
+        }
         assert all(item.chunk_count > 0 for item in response.strategies)
 
     def test_streams_every_strategy_without_scoring_or_pruning(
@@ -149,14 +157,18 @@ class TestProcess:
         # ...then each chunk is streamed with insert_chunk, one call per chunk,
         # every chunk carrying its embedding.
         streamed = storage.insert_chunk.call_args_list
-        assert {call.args[1] for call in streamed} == {"fixed", "semantic"}
+        assert {call.args[1] for call in streamed} == {
+            "fixed",
+            "semantic",
+            "structural",
+        }
         assert all(call.args[0] == 55 for call in streamed)
         assert all(call.args[3].embedding for call in streamed)
 
         # Nothing is scored or deleted here: pruning is deferred to /evaluate.
         storage.delete_chunks_except.assert_not_called()
         # The response counts match how many chunks were streamed per strategy.
-        streamed_counts = {"fixed": 0, "semantic": 0}
+        streamed_counts = {"fixed": 0, "semantic": 0, "structural": 0}
         for call in streamed:
             streamed_counts[call.args[1]] += 1
         assert {
@@ -179,7 +191,7 @@ class TestProcess:
         )
 
         # Each strategy's chunk_index restarts at 0 and increments by one.
-        for strategy in ("fixed", "semantic"):
+        for strategy in ("fixed", "semantic", "structural"):
             indices = [
                 call.args[2]
                 for call in storage.insert_chunk.call_args_list
@@ -204,6 +216,28 @@ class TestProcess:
         assert all(
             len(chunk.text.split()) <= 3 for chunk in _stored_chunks(storage, "fixed")
         )
+
+    def test_uses_the_given_patterns_for_the_structural_candidate(
+        self, make_pdf: Callable[[list[str]], bytes]
+    ) -> None:
+        storage = _fake_storage(document_id=1)
+
+        service.process(
+            make_pdf(["Clause 1 Scope.", "Clause 2 Limits."]),
+            "report.pdf",
+            "analyst",
+            structural=StructuralChunkingRequest(
+                heading_patterns=[r"^Clause \d+"], min_words=0
+            ),
+            storage=storage,
+        )
+
+        # "Clause N" is no marker of the built-in set, so by default these two
+        # pages would be one chunk; the caller's pattern sections them.
+        assert [chunk.text for chunk in _stored_chunks(storage, "structural")] == [
+            "Clause 1 Scope.",
+            "Clause 2 Limits.",
+        ]
 
     def test_non_pdf_is_not_chunked_or_persisted(self) -> None:
         storage = MagicMock()

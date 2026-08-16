@@ -69,7 +69,11 @@ def test_pdf_is_chunked_and_every_strategy_stored(
     # The response reports which strategies were stored, not the chunks themselves.
     assert "chunks" not in body
     # Every strategy is chunked and reported; no scoring/winner at process time.
-    assert {item["strategy"] for item in body["strategies"]} == {"fixed", "semantic"}
+    assert {item["strategy"] for item in body["strategies"]} == {
+        "fixed",
+        "semantic",
+        "structural",
+    }
     assert all(item["chunk_count"] > 0 for item in body["strategies"])
     # The document row was created once, and each strategy's chunks streamed in;
     # nothing was pruned.
@@ -78,6 +82,7 @@ def test_pdf_is_chunked_and_every_strategy_stored(
     assert {call.args[1] for call in fake_storage.insert_chunk.call_args_list} == {
         "fixed",
         "semantic",
+        "structural",
     }
     fake_storage.delete_chunks_except.assert_not_called()
 
@@ -147,6 +152,49 @@ def test_malformed_exclude_pages_error_names_the_field(
 
     assert response.status_code == 422
     assert response.json()["detail"][0]["loc"][0] == "exclude_pages"
+
+
+def test_structural_field_tunes_the_structural_candidate(
+    make_pdf: Callable[[list[str]], bytes], fake_storage: MagicMock
+) -> None:
+    # "Clause N" is no marker of the built-in set, so the two pages would be one
+    # structural chunk; the caller's pattern makes each of them a section.
+    pdf = make_pdf(["Clause 1 Scope.", "Clause 2 Limits."])
+    response = client.post(
+        "/process",
+        data={
+            "name": "report.pdf",
+            "access_role": "analyst",
+            "structural": '{"heading_patterns": ["^Clause \\\\d+"], "min_words": 0}',
+        },
+        files={"file": ("doc.pdf", pdf, "application/pdf")},
+    )
+
+    assert response.status_code == 200
+    structural = [
+        call.args[3].text
+        for call in fake_storage.insert_chunk.call_args_list
+        if call.args[1] == "structural"
+    ]
+    assert structural == ["Clause 1 Scope.", "Clause 2 Limits."]
+
+
+def test_malformed_structural_error_names_the_field(
+    make_pdf: Callable[[list[str]], bytes],
+) -> None:
+    pdf = make_pdf(["ONE"])
+    response = client.post(
+        "/process",
+        data={
+            "name": "report.pdf",
+            "access_role": "analyst",
+            "structural": '{"heading_patterns": ["^(unclosed"]}',
+        },
+        files={"file": ("doc.pdf", pdf, "application/pdf")},
+    )
+
+    assert response.status_code == 422
+    assert response.json()["detail"][0]["loc"][0] == "structural"
 
 
 def test_non_positive_chunk_size_is_rejected(
@@ -242,6 +290,7 @@ def test_chunk_size_is_optional(
     assert {item["strategy"] for item in response.json()["strategies"]} == {
         "fixed",
         "semantic",
+        "structural",
     }
 
 
