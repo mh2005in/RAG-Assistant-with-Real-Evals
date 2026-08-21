@@ -11,7 +11,38 @@ Guidance for working in this repository. Keep it short and current — prune rul
 
 RAG assistant built with an **evaluation-driven** approach: every pipeline stage (extraction → web scraping → chunking → embedding → storage → validation) is measured with real evals, not vibes. See [README.md](README.md) for the stage-by-stage architecture. Early development — architecture and tooling are still being finalized.
 
-**Repository layout:** the Python/RAG service lives in [`backend/`](backend/) (all app code, `pyproject.toml`/`uv.lock`, `Dockerfile`, `db/`); [`frontend/`](frontend/) is reserved for the web UI (not built yet). Docker Compose, `.env`/`.env.example`, this file, and the README stay at the repo root and span both. **Run all `uv`/Python commands from `backend/`** (`cd backend`, or `uv run --directory backend …`).
+**Repository layout:** the Python/RAG service lives in [`backend/`](backend/) (all app code, `pyproject.toml`/`uv.lock`, `Dockerfile`, `db/`); the Angular web UI lives in [`frontend/`](frontend/). Docker Compose, `.env`/`.env.example`, this file, and the README stay at the repo root and span both. **Run all `uv`/Python commands from `backend/`** (`cd backend`, or `uv run --directory backend …`).
+
+## Delivery documents ([`.claude/`](.claude/))
+
+Requirements, plan and status live in the repo, not in someone's head. Keep them current with the code — the same rule the README follows.
+
+- **[Requirements.md](.claude/Requirements.md)** — the register: every requirement has a stable `REQ-<STAGE>-<NN>` id, a *testable* acceptance criterion, a status, and the evidence that proves it. Nothing gets built without an id.
+- **[Plan.md](.claude/Plan.md)** — phases and sequencing for everything not yet done, with dependencies and exit criteria. Pull work from the earliest open phase.
+- **[Architecture.md](.claude/Architecture.md)** — boundaries, contracts, data model, request flows, and the decision record. Update it when a boundary or trade-off changes.
+- **[Delivery-Approach.md](.claude/Delivery-Approach.md)** — the delivery loop, the Definition of Done, and how the skills and agents fit together. This is the contract the automation implements.
+- **[Status-Dashboard.md](.claude/Status-Dashboard.md)** — derived state. Don't hand-edit; regenerate with `/sync-status`.
+- **[Change-Log.md](.claude/Change-Log.md)** — what shipped, by merge date, naming the requirement ids it closed.
+
+**Statuses are derived from evidence, not declared.** A pipeline-stage requirement can't reach `Done` without a real eval — same rule as [Eval-driven workflow](#eval-driven-workflow) below.
+
+### Skills and agents
+
+Four skills drive the loop; four agents do the delegated work inside it.
+
+| Skill | Use it when |
+| --- | --- |
+| [`deliver-requirement`](.claude/skills/deliver-requirement/SKILL.md) | Building anything with a REQ id — runs the whole loop and stops at each failing gate |
+| [`add-requirement`](.claude/skills/add-requirement/SKILL.md) | A new need appears, or a requirement turns out to be untestable |
+| [`sync-status`](.claude/skills/sync-status/SKILL.md) | After a merge, or when asked where the project stands |
+| [`record-change`](.claude/skills/record-change/SKILL.md) | After a merge, to log what shipped |
+
+| Agent | Delegated job |
+| --- | --- |
+| [`requirements-analyst`](.claude/agents/requirements-analyst.md) | Audits whether a requirement's evidence supports its status (read-only) |
+| [`eval-runner`](.claude/agents/eval-runner.md) | Runs the evals and test tiers, reports numbers and regressions |
+| [`docs-sync`](.claude/agents/docs-sync.md) | Cross-checks README, this file and `.claude/` docs against the repo (read-only) |
+| [`deploy-verify`](.claude/agents/deploy-verify.md) | Builds the stack, waits for health, exercises the API and stack E2E |
 
 ## Enforced automatically (don't re-check by hand)
 
