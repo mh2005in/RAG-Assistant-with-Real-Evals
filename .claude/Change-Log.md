@@ -32,6 +32,12 @@ See [Plan.md](Plan.md).
   rather than a silent re-resolve. The integration tests stay excluded — they need
   a live Postgres/pgvector — so proving the deployed stack remains the
   `deploy-verify` agent's job.
+- **Three tests closing gaps the audit found**, taking the fast tier from 137 to
+  140. Page exclusion is now asserted against the semantic and structural chunks
+  rather than only the fixed ones, and the per-strategy retrieval filter is
+  asserted to reach storage from `/retrieve` **and** `/answer` — previously it was
+  proven only by a storage-layer integration test that bypassed both endpoints.
+  Neither was a bug: the behaviour was correct, but nothing held it in place.
 
 ### Changed
 - **The delivery loop now names every document it must update** (advances
@@ -43,6 +49,15 @@ See [Plan.md](Plan.md).
   ships. Both copies of the Definition of Done gained the matching line, and
   `Status-Dashboard.md` and `Change-Log.md` are now called out as derived state
   that is never hand-edited in that step.
+- **The eval rule now gates quality claims, not every requirement in a pipeline
+  stage.** As written, it said any `EXT`/`CHK`/`EMB`/`STO`/`RET`/`GEN` requirement
+  needed a real eval to be `Done` — which would have demoted ten rows asserting
+  things an eval cannot measure, like "a non-PDF is rejected" or "the model is
+  swappable by environment". It now gates claims about *how well* something works
+  (a strategy's performance, an answer's groundedness); functional contracts in the
+  same stage are proven by tests. An evidence audit applied the sharpened rule to
+  all 53 rows; `REQ-GEN-01` moves to `Partial` because *grounded* is a quality
+  claim nothing currently measures (`REQ-EVL-06` is the eval that would close it).
 
 *PR #29, #30*
 

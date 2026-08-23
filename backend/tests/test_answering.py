@@ -6,7 +6,7 @@ mocked, so these run offline.
 
 from unittest.mock import MagicMock
 
-from dtos.requests import AnswerRequest
+from dtos.requests import AnswerRequest, ChunkingStrategy
 from dtos.responses import RetrievedChunk
 from services.answering import Answering
 
@@ -67,3 +67,24 @@ def test_answer_with_no_context_skips_the_model() -> None:
     assert response.sources == []
     assert "couldn't find" in response.answer
     llm.generate.assert_not_called()
+
+
+def test_answer_confines_retrieval_to_one_chunking_strategy() -> None:
+    storage = MagicMock()
+    storage.search_chunks.return_value = [_chunk("alpha")]
+    llm = MagicMock()
+    llm.generate.return_value = "Alpha is a letter [1]."
+
+    Answering().answer(
+        AnswerRequest(
+            query="what is alpha?",
+            access_role="student",
+            chunking_strategy=ChunkingStrategy.semantic,
+        ),
+        storage,
+        llm,
+    )
+
+    # /answer forwards the strategy through the RetrievalRequest it builds, so
+    # the filter reaches storage from this endpoint too.
+    assert storage.search_chunks.call_args.args[3] == "semantic"

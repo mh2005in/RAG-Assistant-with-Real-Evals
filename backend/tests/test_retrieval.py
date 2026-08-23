@@ -6,7 +6,7 @@ storage is mocked so no database is touched.
 
 from unittest.mock import MagicMock
 
-from dtos.requests import RetrievalRequest
+from dtos.requests import ChunkingStrategy, RetrievalRequest
 from dtos.responses import RetrievedChunk
 from services.retrieval import Retrieval
 
@@ -53,3 +53,21 @@ def test_retrieve_with_no_matches_returns_empty() -> None:
 
     assert response.count == 0
     assert response.results == []
+
+
+def test_retrieve_confined_to_one_chunking_strategy() -> None:
+    storage = MagicMock()
+    storage.search_chunks.return_value = []
+
+    Retrieval().retrieve(
+        RetrievalRequest(
+            query="find alpha",
+            access_role="analyst",
+            chunking_strategy=ChunkingStrategy.structural,
+        ),
+        storage,
+    )
+
+    # The strategy reaches storage as its plain string value, so the search is
+    # confined to that strategy's chunks rather than spanning every strategy.
+    assert storage.search_chunks.call_args.args[3] == "structural"
