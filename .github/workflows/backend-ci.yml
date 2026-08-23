@@ -22,7 +22,7 @@ jobs:
       run:
         working-directory: backend
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       # working-directory is repeated here because a job's `defaults.run` applies
       # only to `run` steps -- the action needs its own pointer at backend/ to
       # find pyproject.toml and .python-version.
