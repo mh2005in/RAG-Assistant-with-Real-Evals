@@ -14,8 +14,8 @@ something in the repo; where it doesn't, it says so.
 | | |
 | --- | --- |
 | **Phase** | 3 of 7 complete · **Phase 4 (Measurement depth) in progress** — 4.1 shipped, 4.2–4.5 open |
-| **Requirements** | 41 Done · 1 Partial · 10 Planned · 1 Proposed — **53 total** |
-| **Delivered** | 77% of the register (41/53) |
+| **Requirements** | 38 Done · 4 Partial · 10 Planned · 1 Proposed — **53 total** |
+| **Delivered** | 71% of the register (38/53) |
 | **Backend tests** | 143 collected — 137 fast/offline, 6 `integration` |
 | **Frontend tests** | 9 mocked E2E specs · 3 stack E2E specs · 2 component specs |
 | **Quality gates** | **7 of 7 requirements met** — backend CI closed the last gap |
@@ -25,9 +25,9 @@ something in the repo; where it doesn't, it says so.
 ## Requirements by stage
 
 ```
-EXT  ██████░░░░░░░░░  2/5    CHK  ██████████░░░░░  5/7
+EXT  ███░░░░░░░░░░░░  1/5    CHK  ██████████░░░░░  5/7
 EMB  ███████░░░░░░░░  1/2    STO  ███████████████  3/3
-RET  ███████████████  2/2    GEN  ███████████████  2/2
+RET  ███████░░░░░░░░  1/2    GEN  ███████░░░░░░░░  1/2
 EVL  █████░░░░░░░░░░  2/6    API  ███████████████  4/4
 SEC  ███████░░░░░░░░  2/4    UI   ███████████████  4/4
 OPS  ███████████████  4/4    QUA  ███████████████  7/7
@@ -36,19 +36,21 @@ DOC  ███████████████  3/3
 
 | Stage | Done | Open | State |
 | --- | --- | --- | --- |
-| Storage, Retrieval, Generation, API, UI, Ops, Docs | 22 | 0 | **Complete** |
+| Storage, API, UI, Ops, Docs | 18 | 0 | **Complete** |
 | Quality | 7 | 0 | **Complete** — backend CI closed the last gap on 2026-08-23 |
 | Chunking | 5 | 2 | Three strategies shipped; recursive and LLM-based deferred to Phase 7 |
-| Extraction | 2 | 3 | PDF only; OCR, other formats, scraping all Phase 5 |
+| Retrieval | 1 | 1 | Works; the per-strategy filter is unproven at the `/retrieve` and `/answer` layer |
+| Generation | 1 | 1 | Works; *grounded* is a quality claim with no eval behind it yet |
+| Extraction | 1 | 4 | PDF only; page exclusion unproven for two of three strategies |
 | Access & safety | 2 | 2 | Flat role works; richer roles and output validation in Phase 6 |
 | Embedding | 1 | 1 | Works; locked to 768 dims by the schema |
 | **Evaluation** | 2 | 4 | **The thinnest area, and the project's whole premise** |
 
 ## Where the risk actually is
 
-**Evaluation coverage is the weak point, and now the only one.** `REQ-EVL-02` —
-every stage measured by a real eval — is the sole `Partial` in the register, and
-it's the requirement the project's premise rests on. Today:
+**Evaluation coverage is the weak point.** `REQ-EVL-02` — every stage measured by
+a real eval — is the requirement the project's premise rests on, and an audit on
+2026-08-23 found it casts a longer shadow than the register admitted. Today:
 
 | Stage | Eval? |
 | --- | --- |
@@ -60,6 +62,18 @@ it's the requirement the project's premise rests on. Today:
 All four open evaluation requirements (`REQ-EVL-02`, `04`, `05`, `06`) are the
 remainder of Phase 4 — which is why Phase 4 continues rather than the more visible
 feature work in Phases 5–7.
+
+**Three requirements were demoted on 2026-08-23** by an evidence audit, and they
+are the honest reading of what is actually proven:
+
+| Requirement | Why it is `Partial` |
+| --- | --- |
+| `REQ-GEN-01` | *"Returns a **grounded** answer"* is a quality claim. The response shape is tested; groundedness is not measured. `REQ-EVL-06` is the eval that would close it. |
+| `REQ-RET-02` | Every `RetrievalRequest`/`AnswerRequest` in the suite omits `chunking_strategy`, so the filter is proven only at the storage layer — never through `/retrieve` or `/answer`, which is what the criterion states. |
+| `REQ-EXT-02` | Page exclusion is asserted only for the `fixed` strategy; nothing checks semantic or structural chunks, so the criterion's **every strategy** clause is unproven. |
+
+The last two are **test-coverage gaps, not eval gaps** — each closes with a test,
+not a measurement campaign.
 
 **One decision is blocking work.** `REQ-EVL-05` (RAGAS LLM-judge) can't start
 until someone chooses: a fully-local judge — open-source and free, but a small

@@ -24,7 +24,7 @@ Requirements, plan and status live in the repo, not in someone's head. Keep them
 - **[Status-Dashboard.md](.claude/Status-Dashboard.md)** — derived state. Don't hand-edit; regenerate with `/sync-status`.
 - **[Change-Log.md](.claude/Change-Log.md)** — what shipped, by merge date, naming the requirement ids it closed.
 
-**Statuses are derived from evidence, not declared.** A pipeline-stage requirement can't reach `Done` without a real eval — same rule as [Eval-driven workflow](#eval-driven-workflow) below.
+**Statuses are derived from evidence, not declared.** A pipeline-stage requirement that makes a **quality** claim can't reach `Done` without a real eval — same rule as [Eval-driven workflow](#eval-driven-workflow) below. A functional contract in the same stage (a status code, a schema constraint, a config swap) is proven by tests instead.
 
 ### Skills and agents
 
@@ -60,7 +60,7 @@ Four skills drive the loop; four agents do the delegated work inside it.
 
 ## Eval-driven workflow
 
-- **A pipeline stage is not "done" until it has a real eval.** No new chunking/embedding/retrieval strategy merges without a measurement of how it performs.
+- **A pipeline stage's quality claims are not "done" until they have a real eval.** No new chunking/embedding/retrieval strategy merges without a measurement of how it performs. This gates claims about *how well* something works — not the stage's functional contracts, which tests prove.
 - Prefer comparative evals: evaluate a new strategy against the existing ones on the same data, and record the numbers.
 - Keep eval datasets, prompts, and results reproducible — check in the eval code and config; treat scores as regenerable artifacts, not screenshots.
 - When you claim something "works" or "improved," cite the eval output — don't assert quality from reading code.

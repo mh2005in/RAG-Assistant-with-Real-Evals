@@ -24,8 +24,11 @@ Stage prefixes follow the pipeline: `EXT` extraction · `CHK` chunking ·
 `OPS` stack and config · `QUA` quality gates · `DOC` documentation.
 
 **The eval rule overrides everything below:** per [CLAUDE.md](../CLAUDE.md), a
-pipeline-stage requirement (`EXT`/`CHK`/`EMB`/`STO`/`RET`/`GEN`) can't reach
-`Done` without a real eval measuring it — see `REQ-EVL-02`.
+pipeline-stage requirement (`EXT`/`CHK`/`EMB`/`STO`/`RET`/`GEN`) that makes a
+**quality** claim — how well a strategy performs, how grounded an answer is — can't
+reach `Done` without a real eval measuring it. A purely functional contract in the
+same stage (a status code, a response field, a schema constraint) is proven by
+tests, not by an eval. See `REQ-EVL-02`.
 
 ---
 
@@ -34,7 +37,7 @@ pipeline-stage requirement (`EXT`/`CHK`/`EMB`/`STO`/`RET`/`GEN`) can't reach
 | ID | Requirement | Status | Acceptance | Evidence |
 | --- | --- | --- | --- | --- |
 | REQ-EXT-01 | Detect a PDF upload and extract its text page by page, with per-page stats (chars, words, raw sentence count, token estimate). | Done | `POST /process` on a PDF returns `processed: true` and `doc_type: "pdf"`; a non-PDF is rejected. | [file_processing.py](../backend/services/file_processing.py), [test_file_processing.py](../backend/tests/test_file_processing.py) |
-| REQ-EXT-02 | Exclude pages before chunking, by page number and/or inclusive range, without shifting the numbering of the pages that remain. | Done | Excluding page 1 and pages 10–12 drops exactly those pages for **every** strategy; malformed input is a field-scoped 422. | [pages.py](../backend/dtos/requests/pages.py), [test_page_exclusion.py](../backend/tests/test_page_exclusion.py) |
+| REQ-EXT-02 | Exclude pages before chunking, by page number and/or inclusive range, without shifting the numbering of the pages that remain. | Partial | Excluding page 1 and pages 10–12 drops exactly those pages for **every** strategy; malformed input is a field-scoped 422. | [pages.py](../backend/dtos/requests/pages.py), [test_page_exclusion.py](../backend/tests/test_page_exclusion.py) — **Gap:** exclusion is only asserted for the `fixed` strategy; no test inspects the semantic or structural chunks afterwards, so the criterion's **every strategy** clause is unproven. |
 | REQ-EXT-03 | OCR scanned PDFs (Tesseract) so image-only pages yield text. | Planned | A scanned PDF with no text layer produces chunks; an eval compares OCR'd against native extraction quality. | — |
 | REQ-EXT-04 | Ingest non-PDF document types (DOCX, HTML, plain text) behind the same extraction step. | Planned | `POST /process` accepts the type and reports it in `doc_type`; per-page stats degrade gracefully for paginationless formats. | — |
 | REQ-EXT-05 | Ingest web pages (Firecrawl / headless browser / BeautifulSoup) as documents. | Planned | A URL can be processed into stored, retrievable chunks; scraped content is never committed to the repo. | — |
@@ -46,7 +49,7 @@ pipeline-stage requirement (`EXT`/`CHK`/`EMB`/`STO`/`RET`/`GEN`) can't reach
 | REQ-CHK-01 | Every chunking strategy sits behind one `Chunker` interface so strategies stay swappable and comparable. | Done | A new strategy is added by implementing `Chunker` alone — no changes to extraction, embedding, or storage. | [chunking/base.py](../backend/services/chunking/base.py) |
 | REQ-CHK-02 | Fixed-size chunking in **words**, with a caller-tunable `chunk_size` (default 200). | Done | A given chunk size yields windows of at most that many words; a non-positive size is a 422. | [fixed_size.py](../backend/services/chunking/fixed_size.py), [test_fixed_size_chunker.py](../backend/tests/test_fixed_size_chunker.py) |
 | REQ-CHK-03 | Semantic chunking that breaks where consecutive sentences drift apart in embedding space. | Done | Boundaries land on topic shifts in prose that carries no markup; measured against the fixed-size baseline. | [semantic.py](../backend/services/chunking/semantic.py), [chunking_strategies.json](../backend/evals/results/chunking_strategies.json) |
-| REQ-CHK-04 | Structural chunking on a document's own markers (headings, numbered sections, Chapter/Section/Appendix labels, roman and lettered items, ALL-CAPS titles), with caller-supplied patterns and word bounds. | Done | A structured document beats the baseline on the coherence score; a marker-free document falls back to paragraphs; an uncompilable regex is a 422. | [structural.py](../backend/services/chunking/structural.py), [test_structural_chunker.py](../backend/tests/test_structural_chunker.py) |
+| REQ-CHK-04 | Structural chunking on a document's own markers (headings, numbered sections, Chapter/Section/Appendix labels, roman and lettered items, ALL-CAPS titles), with caller-supplied patterns and word bounds. | Done | A structured document beats the baseline on the coherence score; a marker-free document falls back to paragraphs; an uncompilable regex is a 422. | [structural.py](../backend/services/chunking/structural.py), [test_structural_chunker.py](../backend/tests/test_structural_chunker.py), [chunking_strategies.json](../backend/evals/results/chunking_strategies.json) — the artifact is what proves the coherence claim. |
 | REQ-CHK-05 | `/process` runs **every** implemented strategy and stores all of their chunks against one document row — the caller never picks a strategy, and nothing is scored or dropped at ingest. | Done | The `/process` response lists each strategy and its chunk count; the `chunks` table holds all of them side by side. | [file_processing.py](../backend/services/file_processing.py), [process.py](../backend/dtos/responses/process.py) |
 | REQ-CHK-06 | Recursive chunking (split on a descending list of separators) behind the `Chunker` interface. | Planned | Registered in the strategy set, scored by the comparison eval, and reported by `/process` like the rest. | — |
 | REQ-CHK-07 | LLM-based chunking (a model proposes the boundaries) behind the `Chunker` interface. | Planned | As above, plus a documented cost and latency note — it would be the only strategy spending LLM calls at ingest. | — |
@@ -71,13 +74,13 @@ pipeline-stage requirement (`EXT`/`CHK`/`EMB`/`STO`/`RET`/`GEN`) can't reach
 | ID | Requirement | Status | Acceptance | Evidence |
 | --- | --- | --- | --- | --- |
 | REQ-RET-01 | `POST /retrieve` embeds a query and returns the top-k most similar chunks with scores, restricted to the caller's access role. | Done | Results carry document name, strategy, page number, text and score; a mismatched role returns nothing. | [retrieval.py](../backend/services/retrieval.py), [test_retrieval.py](../backend/tests/test_retrieval.py) |
-| REQ-RET-02 | Retrieval can be confined to one chunking strategy, so the same document chunked several ways is comparable. | Done | Passing a strategy searches only that strategy's chunks, on both `/retrieve` and `/answer`. | [retrieval.py](../backend/services/retrieval.py) |
+| REQ-RET-02 | Retrieval can be confined to one chunking strategy, so the same document chunked several ways is comparable. | Partial | Passing a strategy searches only that strategy's chunks, on both `/retrieve` and `/answer`. | [retrieval.py](../backend/services/retrieval.py), [answering.py](../backend/services/answering.py) — **Gap:** every `RetrievalRequest`/`AnswerRequest` in the suite omits `chunking_strategy`, so the filter is proven only at the storage layer ([test_postgres_storage.py](../backend/tests/test_postgres_storage.py)) and never through `/retrieve` or `/answer` as the criterion states. |
 
 ## GEN — Generation
 
 | ID | Requirement | Status | Acceptance | Evidence |
 | --- | --- | --- | --- | --- |
-| REQ-GEN-01 | `POST /answer` retrieves context, augments the prompt with it, and returns a grounded answer plus its source chunks. | Done | The response carries the answer and the sources it was grounded in; citations refer to those sources. | [answering.py](../backend/services/answering.py), [test_answering.py](../backend/tests/test_answering.py) |
+| REQ-GEN-01 | `POST /answer` retrieves context, augments the prompt with it, and returns a grounded answer plus its source chunks. | Partial | The response carries the answer and the sources it was grounded in; citations refer to those sources. | [answering.py](../backend/services/answering.py), [test_answering.py](../backend/tests/test_answering.py) — **Gap:** the response shape is tested, but **grounded** is a quality claim and nothing measures it. `REQ-EVL-06` (answer faithfulness) is the eval that would. |
 | REQ-GEN-02 | Generation runs through one `LLMClient` interface backed by local Ollama, model set by environment (default `gemma2:2b`). | Done | No external API key; a larger model can be swapped in by environment alone; tests override the client with a fake. | [ollama_client.py](../backend/services/generation/ollama_client.py), [test_ollama_client.py](../backend/tests/test_ollama_client.py) |
 
 ## EVL — Evaluation
@@ -97,8 +100,8 @@ pipeline-stage requirement (`EXT`/`CHK`/`EMB`/`STO`/`RET`/`GEN`) can't reach
 | --- | --- | --- | --- | --- |
 | REQ-API-01 | Four endpoints — `/process`, `/evaluate`, `/retrieve`, `/answer` — documented by OpenAPI at `/docs`. | Done | `GET /openapi.json` returns 200 and lists all four. | [api.py](../backend/api.py), [test_api.py](../backend/tests/test_api.py) |
 | REQ-API-02 | Every request and response is a Pydantic model kept in `dtos/requests/` and `dtos/responses/` — never defined inline in a route. | Done | No DTO class is declared in `api.py`; routes import them. | [dtos/](../backend/dtos/) |
-| REQ-API-03 | A malformed JSON-carrying form field returns a 422 whose error location names the field, not a bare type error. | Done | Bad page-exclusion or structural input reports the field name in `loc`. | [api.py:52](../backend/api.py) |
-| REQ-API-04 | Route handlers stay thin: processing lives in `services/`, one service class per endpoint, dependencies injected per request. | Done | Each route delegates to one service; storage and the LLM client are FastAPI dependencies that tests override with fakes. | [api.py](../backend/api.py), [conftest.py](../backend/tests/conftest.py) |
+| REQ-API-03 | A malformed JSON-carrying form field returns a 422 whose error location names the field, not a bare type error. | Done | Bad page-exclusion or structural input reports the field name in `loc`. | [api.py:56](../backend/api.py), [test_api.py](../backend/tests/test_api.py) |
+| REQ-API-04 | Route handlers stay thin: processing lives in `services/`, one service class per endpoint, dependencies injected per request. | Done | Each route delegates to one service; storage and the LLM client are FastAPI dependencies that tests override with fakes. | [api.py](../backend/api.py), [test_api.py](../backend/tests/test_api.py) — the `dependency_overrides` fixtures live there, not in `conftest.py`. |
 
 ## SEC — Access and safety
 
@@ -153,12 +156,12 @@ pipeline-stage requirement (`EXT`/`CHK`/`EMB`/`STO`/`RET`/`GEN`) can't reach
 
 | Stage | Done | Partial | Planned | Proposed | Total |
 | --- | --- | --- | --- | --- | --- |
-| EXT | 2 | 0 | 3 | 0 | 5 |
+| EXT | 1 | 1 | 3 | 0 | 5 |
 | CHK | 5 | 0 | 2 | 0 | 7 |
 | EMB | 1 | 0 | 1 | 0 | 2 |
 | STO | 3 | 0 | 0 | 0 | 3 |
-| RET | 2 | 0 | 0 | 0 | 2 |
-| GEN | 2 | 0 | 0 | 0 | 2 |
+| RET | 1 | 1 | 0 | 0 | 2 |
+| GEN | 1 | 1 | 0 | 0 | 2 |
 | EVL | 2 | 1 | 2 | 1 | 6 |
 | API | 4 | 0 | 0 | 0 | 4 |
 | SEC | 2 | 0 | 2 | 0 | 4 |
@@ -166,7 +169,7 @@ pipeline-stage requirement (`EXT`/`CHK`/`EMB`/`STO`/`RET`/`GEN`) can't reach
 | OPS | 4 | 0 | 0 | 0 | 4 |
 | QUA | 7 | 0 | 0 | 0 | 7 |
 | DOC | 3 | 0 | 0 | 0 | 3 |
-| **Total** | **41** | **1** | **10** | **1** | **53** |
+| **Total** | **38** | **4** | **10** | **1** | **53** |
 
 Sequencing for everything not yet `Done` is in [Plan.md](Plan.md); live status is
 in [Status-Dashboard.md](Status-Dashboard.md).

@@ -43,6 +43,15 @@ See [Plan.md](Plan.md).
   ships. Both copies of the Definition of Done gained the matching line, and
   `Status-Dashboard.md` and `Change-Log.md` are now called out as derived state
   that is never hand-edited in that step.
+- **The eval rule now gates quality claims, not every requirement in a pipeline
+  stage.** As written, it said any `EXT`/`CHK`/`EMB`/`STO`/`RET`/`GEN` requirement
+  needed a real eval to be `Done` — which would have demoted ten rows asserting
+  things an eval cannot measure, like "a non-PDF is rejected" or "the model is
+  swappable by environment". It now gates claims about *how well* something works
+  (a strategy's performance, an answer's groundedness); functional contracts in the
+  same stage are proven by tests. An evidence audit applied the sharpened rule and
+  moved `REQ-GEN-01`, `REQ-RET-02` and `REQ-EXT-02` to `Partial`, each with its gap
+  named.
 
 *PR #29, #30*
 
