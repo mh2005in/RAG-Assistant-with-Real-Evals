@@ -106,6 +106,7 @@ These already fire without being asked — don't re-check them by hand:
 | On commit | Author is `mh2005in` → gitleaks on staged diff → fast pytest | `.githooks/pre-commit` |
 | After a clean `deploy-verify` | Removes caches, dangling images, build cache, scratchpad | `.claude/hooks/deploy-verify-cleanup.sh` |
 | On merge into `main` | Removes merged worktrees | `.githooks/post-merge` |
+| PR touching `backend/**` | `ruff format --check`, `ruff check`, `mypy`, fast pytest in CI | `.github/workflows/backend-ci.yml` |
 | PR touching `frontend/**` | Mocked Playwright E2E in CI | `.github/workflows/frontend-e2e.yml` |
 
 Enable the git hooks in a fresh clone:
@@ -114,8 +115,10 @@ Enable the git hooks in a fresh clone:
 git config core.hooksPath .githooks
 ```
 
-**Known gap:** backend tests, lint and types run only as local hooks — there's no
-CI workflow for `backend/**` yet. That's `REQ-QUA-06`, first item in Phase 4.
+Between them, the local hooks and the two CI workflows mean the same gates apply
+whether or not a contributor has the hooks configured: `backend-ci` re-runs the
+format, lint, type and fast-test gates on every backend PR, and `frontend-e2e`
+runs the mocked Playwright suite on every frontend PR.
 
 ## 5. The skills and agents, and how they fit together
 

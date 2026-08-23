@@ -20,9 +20,10 @@ Three constraints set the order, and they matter more than any individual featur
    Adding more ingestion formats or strategies before the measurement layer exists
    means adding things we can't tell are working — which is the exact failure mode
    this project was built to avoid. Phase 4 comes first for that reason.
-2. **Gates before contributors.** Backend tests, lint and types run only as local
-   hooks today (`REQ-QUA-06`). That is fine for one machine and not fine for
-   anything else, so it's folded into Phase 4 as small, cheap insurance.
+2. **Gates before contributors.** Backend tests, lint and types used to run only
+   as local hooks — fine for one machine, not fine for anything else — so
+   `REQ-QUA-06` was folded into Phase 4 as small, cheap insurance and taken
+   first. The `backend-ci` workflow now re-runs those gates on every backend PR.
 3. **Schema changes early in their phase.** `REQ-EMB-02` and `REQ-SEC-02` both
    touch the database, and both are cheaper before more data shapes depend on
    them.
@@ -175,7 +176,7 @@ comparison numbers committed.
 | Local judge quality (`REQ-EVL-05`) | A small local model is a noisy grader; metrics could mislead more than they inform | Treat LLM-judged numbers as indicative, pin model and temperature, keep the deterministic embedding score as the ranking metric |
 | Eval runtime | Semantic chunking and any LLM-judged eval are slow; a slow eval stops being run | Keep evals offline and out of the request path; keep the fast test suite free of both |
 | Schema coupling to 768 dims | Blocks embedding-model experiments (`REQ-EMB-02`) | Address in Phase 6 alongside the other migration |
-| Backend gates are local-only (`REQ-QUA-06`) | A PR from another environment bypasses tests, lint and types entirely | Phase 4.1, deliberately first |
+| Backend gates are local-only (`REQ-QUA-06`) | A PR from another environment bypasses tests, lint and types entirely | **Closed** — the `backend-ci` workflow re-runs format, lint, types and the fast tests on every PR touching `backend/**` |
 | Scraped and source data leaking into git (`REQ-SEC-04`) | Disclosure, and history rewriting to fix | gitleaks on staged diffs, gitignored data paths, human PII check before every commit |
 
 ## Working agreements

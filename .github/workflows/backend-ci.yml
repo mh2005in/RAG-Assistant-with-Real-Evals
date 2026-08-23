@@ -1,0 +1,43 @@
+# Backend quality gates. These are the same checks the local hooks run --
+# ruff format and ruff check after every edit, mypy at the end of a turn
+# (.claude/settings.json), and the fast pytest tier (.githooks/pre-commit) --
+# so a PR raised from an environment without those hooks configured is still
+# guarded.
+#
+# Integration tests need a live Postgres/pgvector and are excluded here. The
+# deployed stack is covered by the deploy-verify agent instead
+# (see .claude/agents/deploy-verify.md).
+name: backend-ci
+
+on:
+  pull_request:
+    paths:
+      - "backend/**"
+      - ".github/workflows/backend-ci.yml"
+
+jobs:
+  gates:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      # working-directory is repeated here because a job's `defaults.run` applies
+      # only to `run` steps -- the action needs its own pointer at backend/ to
+      # find pyproject.toml and .python-version.
+      - uses: astral-sh/setup-uv@v10
+        with:
+          working-directory: backend
+          enable-cache: true
+          cache-dependency-glob: "**/uv.lock"
+      # --frozen: fail if uv.lock has drifted from pyproject.toml, rather than
+      # silently resolving something new. --no-install-project: dependencies
+      # only, since the app runs from source and is not a packaged library (the
+      # same flags backend/Dockerfile uses). The dev group is synced by default,
+      # and that is what supplies ruff, mypy and pytest.
+      - run: uv sync --frozen --no-install-project
+      - run: uv run ruff format --check .
+      - run: uv run ruff check .
+      - run: uv run mypy .
+      - run: uv run pytest -q -m "not integration"
