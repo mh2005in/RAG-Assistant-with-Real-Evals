@@ -26,7 +26,7 @@ jobs:
       # working-directory is repeated here because a job's `defaults.run` applies
       # only to `run` steps -- the action needs its own pointer at backend/ to
       # find pyproject.toml and .python-version.
-      - uses: astral-sh/setup-uv@v10
+      - uses: astral-sh/setup-uv@v10.0.1
         with:
           working-directory: backend
           enable-cache: true
