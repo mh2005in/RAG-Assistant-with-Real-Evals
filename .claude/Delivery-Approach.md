@@ -87,6 +87,7 @@ A requirement is `Done` only when all of these hold. This is the checklist
 - [ ] A pipeline stage has a **real eval** with a committed, regenerable result
 - [ ] `ruff format`, `ruff check`, `mypy` are clean
 - [ ] The README reflects it, and it's out of Roadmap
+- [ ] The plan, architecture, this document and CLAUDE.md reflect it, and no prose still asserts the gap it closed
 - [ ] `deploy-verify` passed, if the change is stack-affecting
 - [ ] The evidence column in Requirements.md points at something that exists
 - [ ] A changelog entry records it

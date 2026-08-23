@@ -91,15 +91,35 @@ quality from reading code.
 
 ## 6. Update the documentation in the same change
 
-Not as a follow-up:
+Not as a follow-up, and not just the obvious file. Walk this list every time:
 
 - [README.md](../../../README.md) — any new or changed endpoint, architecture or
   pipeline change, dependency or stack change, new config/env var, or setup
   change. Shipped work moves out of Roadmap into the relevant section.
+- [Requirements.md](../../Requirements.md) — point the requirement's Evidence at
+  something that now exists, and rewrite the acceptance criterion if delivering it
+  proved it wasn't testable as written.
+- [Plan.md](../../Plan.md) — if the phase's contents or sequencing changed, or a
+  risk it lists is now closed.
 - [Architecture.md](../../Architecture.md) — if a boundary, contract, data model
   or decision changed. Add a decision-record row when you made a real trade-off.
-- Pure internals with no user-facing effect don't need a README edit — but if in
-  doubt, update it.
+- [Delivery-Approach.md](../../Delivery-Approach.md) — if the delivery loop, the
+  Definition of Done, or the automation behind it changed.
+- [CLAUDE.md](../../../CLAUDE.md) — if the change added or altered a gate,
+  convention or piece of automation a contributor has to know about.
+
+Then **grep for prose that still asserts the gap you just closed.** A "known gap"
+note, a risk row or a rationale sentence will happily go on claiming the thing is
+missing. Search the requirement id and a phrase from the gap across `README.md`,
+`CLAUDE.md` and `.claude/*.md`, and fix every hit.
+
+[Status-Dashboard.md](../../Status-Dashboard.md) and
+[Change-Log.md](../../Change-Log.md) are **not** hand-edited here — they're
+derived state, regenerated post-merge by `/sync-status` and `/record-change` in
+step 11.
+
+Pure internals with no user-facing effect don't need a README edit — but if in
+doubt, update it.
 
 ## 7. Wire it into the stack
 
@@ -159,6 +179,8 @@ Don't report the requirement complete until every line holds:
 - [ ] Pipeline stage has a real eval with a committed result artifact
 - [ ] `ruff format`, `ruff check`, `mypy` clean
 - [ ] README reflects it, and it's out of Roadmap
+- [ ] Plan, Architecture, Delivery-Approach and CLAUDE.md reflect it, and no
+      prose anywhere still asserts the gap it closed
 - [ ] `deploy-verify` passed, if stack-affecting
 - [ ] Requirements.md evidence points at something that exists
 - [ ] Changelog entry recorded
