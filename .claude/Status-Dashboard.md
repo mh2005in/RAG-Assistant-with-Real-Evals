@@ -1,7 +1,7 @@
 # Status Dashboard
 
-**As of 2026-08-21** · branch `main` at `456f75c` · last merge PR #27
-(structural chunking, 2026-08-16)
+**As of 2026-08-23** · branch `main` at `203abac` · last merge PR #30
+(delivery-document rule, 2026-08-23)
 
 Derived state — do not hand-edit. Refresh with the `sync-status` skill, which
 re-reads the repository and rewrites this file. Every number below traces to
@@ -13,12 +13,12 @@ something in the repo; where it doesn't, it says so.
 
 | | |
 | --- | --- |
-| **Phase** | 3 of 7 complete · **Phase 4 (Measurement depth) is next, not started** |
-| **Requirements** | 40 Done · 1 Partial · 11 Planned · 1 Proposed — **53 total** |
-| **Delivered** | 75% of the register (40/53) |
+| **Phase** | 3 of 7 complete · **Phase 4 (Measurement depth) in progress** — 4.1 shipped, 4.2–4.5 open |
+| **Requirements** | 41 Done · 1 Partial · 10 Planned · 1 Proposed — **53 total** |
+| **Delivered** | 77% of the register (41/53) |
 | **Backend tests** | 143 collected — 137 fast/offline, 6 `integration` |
 | **Frontend tests** | 9 mocked E2E specs · 3 stack E2E specs · 2 component specs |
-| **Quality gates** | 6 of 7 automated — **backend CI missing** (`REQ-QUA-06`) |
+| **Quality gates** | **7 of 7 requirements met** — backend CI closed the last gap |
 | **Stack** | 4 services + one-shot model puller, all healthchecked |
 | **Working tree** | Clean except untracked `.idea/misc.xml` |
 
@@ -30,15 +30,15 @@ EMB  ███████░░░░░░░░  1/2    STO  █████�
 RET  ███████████████  2/2    GEN  ███████████████  2/2
 EVL  █████░░░░░░░░░░  2/6    API  ███████████████  4/4
 SEC  ███████░░░░░░░░  2/4    UI   ███████████████  4/4
-OPS  ███████████████  4/4    QUA  ████████████░░░  6/7
+OPS  ███████████████  4/4    QUA  ███████████████  7/7
 DOC  ███████████████  3/3
 ```
 
 | Stage | Done | Open | State |
 | --- | --- | --- | --- |
 | Storage, Retrieval, Generation, API, UI, Ops, Docs | 22 | 0 | **Complete** |
+| Quality | 7 | 0 | **Complete** — backend CI closed the last gap on 2026-08-23 |
 | Chunking | 5 | 2 | Three strategies shipped; recursive and LLM-based deferred to Phase 7 |
-| Quality | 6 | 1 | One real gap — backend CI |
 | Extraction | 2 | 3 | PDF only; OCR, other formats, scraping all Phase 5 |
 | Access & safety | 2 | 2 | Flat role works; richer roles and output validation in Phase 6 |
 | Embedding | 1 | 1 | Works; locked to 768 dims by the schema |
@@ -46,9 +46,9 @@ DOC  ███████████████  3/3
 
 ## Where the risk actually is
 
-**Evaluation coverage is the weak point.** `REQ-EVL-02` — every stage measured by
-a real eval — is the only `Partial` in the register, and it's the requirement the
-project's premise rests on. Today:
+**Evaluation coverage is the weak point, and now the only one.** `REQ-EVL-02` —
+every stage measured by a real eval — is the sole `Partial` in the register, and
+it's the requirement the project's premise rests on. Today:
 
 | Stage | Eval? |
 | --- | --- |
@@ -57,19 +57,18 @@ project's premise rests on. Today:
 | Generation | ❌ None. `/answer` quality is currently unmeasured |
 | Extraction, Embedding, Storage | ❌ None |
 
-Four of the six open evaluation requirements (`REQ-EVL-02`, `04`, `05`, `06`) are
-Phase 4 — which is why Phase 4 is next rather than the more visible feature work
-in Phases 5–7.
-
-**Backend CI is missing** (`REQ-QUA-06`). Tests, lint and types run as local hooks
-only. A PR raised from an environment without `core.hooksPath` set is completely
-unguarded. Small fix, first item of Phase 4.
+All four open evaluation requirements (`REQ-EVL-02`, `04`, `05`, `06`) are the
+remainder of Phase 4 — which is why Phase 4 continues rather than the more visible
+feature work in Phases 5–7.
 
 **One decision is blocking work.** `REQ-EVL-05` (RAGAS LLM-judge) can't start
 until someone chooses: a fully-local judge — open-source and free, but a small
 model is a noisy grader — or an external judge API, stronger but with per-call
 cost. The project's stated stance favours local. Until it's recorded, the
 requirement stays `Proposed`.
+
+**The eval datasets are too small to settle anything.** 273 and 556 words. Every
+number in the next section carries that caveat.
 
 ## Current eval numbers
 
@@ -120,33 +119,40 @@ a structure-aware strategy is only as good as the structure it's given.
 | `gitleaks` on staged diff | On commit (hook) | ✅ Automated |
 | Fast pytest (137 tests) | On commit (hook) | ✅ Automated |
 | Mocked frontend E2E | CI, on `frontend/**` PRs | ✅ Automated |
-| **Backend tests / lint / types in CI** | — | ❌ **Missing — `REQ-QUA-06`** |
+| Backend format / lint / types / fast tests | CI, on `backend/**` PRs | ✅ Automated |
 | Stack deploy + health + stack E2E | `deploy-verify` agent, on request | ⚙️ On demand |
 | Post-deploy cleanup | After a clean `deploy-verify` (hook) | ✅ Automated |
 | Merged-worktree cleanup | On merge into `main` (hook) | ✅ Automated |
 | **PII in staged diffs** | — | 👤 **Human check — gitleaks matches secret patterns only** |
 
+Nine gates are automated, one runs on request, and one stays a human
+responsibility. Local hooks and CI now cover the same ground, so a contributor
+without `core.hooksPath` configured is no longer unguarded.
+
 ## Next actions
 
-In order, from [Plan.md](Plan.md) Phase 4:
+In order, from [Plan.md](Plan.md) Phase 4. Item 4.1 (`REQ-QUA-06`) shipped on
+2026-08-23; what remains:
 
-1. **`REQ-QUA-06`** — backend CI workflow (fast tests, `ruff check`, `mypy` on
-   `backend/**`). Smallest item, largest safety gain, no dependencies.
-2. **Decide `REQ-EVL-05`** — local judge vs external judge API. A decision, not
+1. **Decide `REQ-EVL-05`** — local judge vs external judge API. A decision, not
    code; it unblocks the deepest eval work.
-3. **`REQ-EVL-04`** — rank-aware metrics (recall@k, MRR, nDCG) over the Q&A set
+2. **`REQ-EVL-04`** — rank-aware metrics (recall@k, MRR, nDCG) over the Q&A set
    `/evaluate` already takes. Report alongside existing metrics; don't change
    ranking behaviour in the same change.
-4. **`REQ-EVL-06`** — answer-faithfulness eval, the first coverage of the
+3. **`REQ-EVL-06`** — answer-faithfulness eval, the first coverage of the
    generation stage.
-5. **`REQ-EVL-02`** — retrieval and embedding evals, plus larger eval datasets, to
+4. **`REQ-EVL-02`** — retrieval and embedding evals, plus larger eval datasets, to
    close stage coverage and flip this to `Done`.
 
 ## Housekeeping
 
-- `.idea/misc.xml` is untracked. PyCharm config is tracked in this repo (see
-  `7391bd9`), so it should either be committed or added to `.gitignore` — decide,
-  rather than leaving it dangling.
+- `.idea/misc.xml` is untracked while the rest of `.idea/` **is** tracked (7
+  files). It should either be committed or added to `.gitignore` — decide, rather
+  than leaving it dangling.
+- `.claude/worktrees/` is not in `.gitignore`, so an active worktree shows as
+  untracked content in the main checkout.
+- One active worktree (`changelog-sync`); the merged ones were removed
+  automatically by the `post-merge` hook.
 
 ## Refreshing this file
 
