@@ -90,14 +90,14 @@ it is verified by a real deploy.
 
 ---
 
-## Phase 4 — Measurement depth ⬅ **next**
+## Phase 4 — Measurement depth ⬅ **in progress**
 
 **Goal:** close `REQ-EVL-02` — every stage measured, not just chunking — and make
 the backend gates run somewhere other than one laptop.
 
 | # | Requirement | Notes |
 | --- | --- | --- |
-| 4.1 | `REQ-QUA-06` | Backend CI workflow: fast tests, `ruff check`, `mypy` on `backend/**`. Small, unblocks safe contribution. Do first. |
+| 4.1 | `REQ-QUA-06` | ✅ **Shipped 2026-08-23** (PR #29). Backend CI workflow: `ruff format --check`, `ruff check`, `mypy` and the fast tests on `backend/**`. |
 | 4.2 | `REQ-EVL-04` | Rank-aware metrics (recall@k, MRR, nDCG) over the Q&A set `/evaluate` already takes. Report alongside the current metrics; **don't change the ranking behaviour** in the same change. |
 | 4.3 | `REQ-EVL-06` | Answer-faithfulness eval for generation — offline, in `backend/evals/`. The first eval that covers the generation stage. |
 | 4.4 | `REQ-EVL-05` | RAGAS LLM-judge eval. **Blocked on a decision** (local judge vs external judge API) — see the README proposal. Resolve the decision before any code. |

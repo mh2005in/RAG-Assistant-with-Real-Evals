@@ -13,10 +13,55 @@ merged commits. Each entry names the requirement IDs it closes — see
 
 ## Unreleased
 
-Nothing merged since 2026-08-16. Next up is Phase 4 (Measurement depth) — see
-[Plan.md](Plan.md).
+Nothing merged since 2026-08-23. Phase 4 (Measurement depth) is under way — its
+first item, backend CI, has shipped; next are rank-aware retrieval metrics
+(`REQ-EVL-04`) and an answer-faithfulness eval for generation (`REQ-EVL-06`).
+See [Plan.md](Plan.md).
 
 ---
+
+## 2026-08-23
+
+### Added
+- **Backend CI** (`REQ-QUA-06`). Every pull request touching `backend/**` now runs
+  the gates that previously existed only as local git hooks: `ruff format
+  --check`, `ruff check`, `mypy`, and the fast pytest tier (`-m "not
+  integration"`), against a lockfile-pinned install. A pull request raised from a
+  clone without `core.hooksPath` configured is no longer unguarded. `uv sync
+  --frozen` makes a `uv.lock` that has drifted from `pyproject.toml` a CI failure
+  rather than a silent re-resolve. The integration tests stay excluded — they need
+  a live Postgres/pgvector — so proving the deployed stack remains the
+  `deploy-verify` agent's job.
+
+### Changed
+- **The delivery loop now names every document it must update** (advances
+  `REQ-DOC-02`). Step 6 of `deliver-requirement` listed only the README and the
+  architecture document, leaving the register, the plan and the delivery approach
+  to judgment. It now enumerates all of them, and adds an explicit search for
+  prose that still asserts a gap the change just closed — a "known gap" note or a
+  risk-table row will otherwise go on claiming something is missing long after it
+  ships. Both copies of the Definition of Done gained the matching line, and
+  `Status-Dashboard.md` and `Change-Log.md` are now called out as derived state
+  that is never hand-edited in that step.
+
+*PR #29, #30*
+
+## 2026-08-21
+
+### Added
+- **Delivery documents, skills and agents** under [`.claude/`](.) (`REQ-DOC-02`,
+  `REQ-DOC-03`). The requirements register, plan, architecture, delivery approach,
+  status dashboard and this change log now live in the repository. Every
+  requirement carries a stable `REQ-<STAGE>-<NN>` id, a testable acceptance
+  criterion and an evidence column — nothing gets built without an id, and a
+  status is derived from evidence rather than declared. Four skills drive the
+  delivery loop (`deliver-requirement`, `add-requirement`, `sync-status`,
+  `record-change`) and four agents do the delegated work inside it
+  (`requirements-analyst`, `eval-runner`, `docs-sync`, `deploy-verify`). CLAUDE.md
+  gained the rule that routes a proposed convention to its right home — always-on
+  prose, a hook, a skill, or an agent.
+
+*PR #28*
 
 ## 2026-08-16
 

@@ -136,7 +136,7 @@ pipeline-stage requirement (`EXT`/`CHK`/`EMB`/`STO`/`RET`/`GEN`) can't reach
 | REQ-QUA-03 | The frontend has both a fast offline E2E suite (API stubbed in-browser) and a stack suite proving what only the deployment can — the SPA deep-link fallback and the proxy hop. | Done | 9 mocked specs run with no backend; 3 stack specs run against the live stack. | [e2e/](../frontend/e2e/), [playwright.config.ts](../frontend/playwright.config.ts) |
 | REQ-QUA-04 | A commit can't introduce a wrong author, a leaked secret, or a failing fast test. | Done | The pre-commit hook checks the author, runs gitleaks on the staged diff, then runs the fast tests. | [.githooks/pre-commit](../.githooks/pre-commit) |
 | REQ-QUA-05 | The mocked frontend E2E suite runs in CI on every PR touching the frontend. | Done | The `frontend-e2e` workflow runs it and uploads the Playwright report as an artifact. | [frontend-e2e.yml](../.github/workflows/frontend-e2e.yml) |
-| REQ-QUA-06 | Backend tests, lint and types run in CI on every PR touching the backend. | Planned | The `backend-ci` workflow runs `ruff format --check`, `ruff check`, `mypy` and the fast pytest tier against a lockfile-pinned install, on every PR touching `backend/**`, and reports green. | [backend-ci.yml](../.github/workflows/backend-ci.yml) — built; awaiting its first PR run, which is the green-run evidence |
+| REQ-QUA-06 | Backend tests, lint and types run in CI on every PR touching the backend. | Done | The `backend-ci` workflow runs `ruff format --check`, `ruff check`, `mypy` and the fast pytest tier against a lockfile-pinned install, on every PR touching `backend/**`, and reports green. | [backend-ci.yml](../.github/workflows/backend-ci.yml) — green on PR #29: 54 files formatted, ruff clean, mypy clean over 54 files, 137 passed / 6 deselected. The `<dir>/**` path filter is proven in this repo by `frontend-e2e` firing on PR #27, which touched `frontend/` but not that workflow file. |
 | REQ-QUA-07 | A bug fix ships with a test that fails without it, and a failing test is never deleted or weakened to make the suite pass. | Done | Convention enforced in review. | [CLAUDE.md](../CLAUDE.md) |
 
 ## DOC — Documentation
@@ -164,9 +164,9 @@ pipeline-stage requirement (`EXT`/`CHK`/`EMB`/`STO`/`RET`/`GEN`) can't reach
 | SEC | 2 | 0 | 2 | 0 | 4 |
 | UI | 4 | 0 | 0 | 0 | 4 |
 | OPS | 4 | 0 | 0 | 0 | 4 |
-| QUA | 6 | 0 | 1 | 0 | 7 |
+| QUA | 7 | 0 | 0 | 0 | 7 |
 | DOC | 3 | 0 | 0 | 0 | 3 |
-| **Total** | **40** | **1** | **11** | **1** | **53** |
+| **Total** | **41** | **1** | **10** | **1** | **53** |
 
 Sequencing for everything not yet `Done` is in [Plan.md](Plan.md); live status is
 in [Status-Dashboard.md](Status-Dashboard.md).
