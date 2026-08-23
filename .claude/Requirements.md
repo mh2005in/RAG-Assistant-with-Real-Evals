@@ -37,7 +37,7 @@ tests, not by an eval. See `REQ-EVL-02`.
 | ID | Requirement | Status | Acceptance | Evidence |
 | --- | --- | --- | --- | --- |
 | REQ-EXT-01 | Detect a PDF upload and extract its text page by page, with per-page stats (chars, words, raw sentence count, token estimate). | Done | `POST /process` on a PDF returns `processed: true` and `doc_type: "pdf"`; a non-PDF is rejected. | [file_processing.py](../backend/services/file_processing.py), [test_file_processing.py](../backend/tests/test_file_processing.py) |
-| REQ-EXT-02 | Exclude pages before chunking, by page number and/or inclusive range, without shifting the numbering of the pages that remain. | Partial | Excluding page 1 and pages 10–12 drops exactly those pages for **every** strategy; malformed input is a field-scoped 422. | [pages.py](../backend/dtos/requests/pages.py), [test_page_exclusion.py](../backend/tests/test_page_exclusion.py) — **Gap:** exclusion is only asserted for the `fixed` strategy; no test inspects the semantic or structural chunks afterwards, so the criterion's **every strategy** clause is unproven. |
+| REQ-EXT-02 | Exclude pages before chunking, by page number and/or inclusive range, without shifting the numbering of the pages that remain. | Done | Excluding page 1 and pages 10–12 drops exactly those pages for **every** strategy; malformed input is a field-scoped 422. | [pages.py](../backend/dtos/requests/pages.py), [test_page_exclusion.py](../backend/tests/test_page_exclusion.py), [test_file_processing.py](../backend/tests/test_file_processing.py) — `test_exclusion_applies_to_every_strategy` asserts the dropped page is absent from the fixed, semantic **and** structural chunks. |
 | REQ-EXT-03 | OCR scanned PDFs (Tesseract) so image-only pages yield text. | Planned | A scanned PDF with no text layer produces chunks; an eval compares OCR'd against native extraction quality. | — |
 | REQ-EXT-04 | Ingest non-PDF document types (DOCX, HTML, plain text) behind the same extraction step. | Planned | `POST /process` accepts the type and reports it in `doc_type`; per-page stats degrade gracefully for paginationless formats. | — |
 | REQ-EXT-05 | Ingest web pages (Firecrawl / headless browser / BeautifulSoup) as documents. | Planned | A URL can be processed into stored, retrievable chunks; scraped content is never committed to the repo. | — |
@@ -74,7 +74,7 @@ tests, not by an eval. See `REQ-EVL-02`.
 | ID | Requirement | Status | Acceptance | Evidence |
 | --- | --- | --- | --- | --- |
 | REQ-RET-01 | `POST /retrieve` embeds a query and returns the top-k most similar chunks with scores, restricted to the caller's access role. | Done | Results carry document name, strategy, page number, text and score; a mismatched role returns nothing. | [retrieval.py](../backend/services/retrieval.py), [test_retrieval.py](../backend/tests/test_retrieval.py) |
-| REQ-RET-02 | Retrieval can be confined to one chunking strategy, so the same document chunked several ways is comparable. | Partial | Passing a strategy searches only that strategy's chunks, on both `/retrieve` and `/answer`. | [retrieval.py](../backend/services/retrieval.py), [answering.py](../backend/services/answering.py) — **Gap:** every `RetrievalRequest`/`AnswerRequest` in the suite omits `chunking_strategy`, so the filter is proven only at the storage layer ([test_postgres_storage.py](../backend/tests/test_postgres_storage.py)) and never through `/retrieve` or `/answer` as the criterion states. |
+| REQ-RET-02 | Retrieval can be confined to one chunking strategy, so the same document chunked several ways is comparable. | Done | Passing a strategy searches only that strategy's chunks, on both `/retrieve` and `/answer`. | [retrieval.py](../backend/services/retrieval.py), [answering.py](../backend/services/answering.py), [test_retrieval.py](../backend/tests/test_retrieval.py), [test_answering.py](../backend/tests/test_answering.py) — the strategy is asserted to reach `search_chunks` from both `/retrieve` and `/answer`. |
 
 ## GEN — Generation
 
@@ -156,11 +156,11 @@ tests, not by an eval. See `REQ-EVL-02`.
 
 | Stage | Done | Partial | Planned | Proposed | Total |
 | --- | --- | --- | --- | --- | --- |
-| EXT | 1 | 1 | 3 | 0 | 5 |
+| EXT | 2 | 0 | 3 | 0 | 5 |
 | CHK | 5 | 0 | 2 | 0 | 7 |
 | EMB | 1 | 0 | 1 | 0 | 2 |
 | STO | 3 | 0 | 0 | 0 | 3 |
-| RET | 1 | 1 | 0 | 0 | 2 |
+| RET | 2 | 0 | 0 | 0 | 2 |
 | GEN | 1 | 1 | 0 | 0 | 2 |
 | EVL | 2 | 1 | 2 | 1 | 6 |
 | API | 4 | 0 | 0 | 0 | 4 |
@@ -169,7 +169,7 @@ tests, not by an eval. See `REQ-EVL-02`.
 | OPS | 4 | 0 | 0 | 0 | 4 |
 | QUA | 7 | 0 | 0 | 0 | 7 |
 | DOC | 3 | 0 | 0 | 0 | 3 |
-| **Total** | **38** | **4** | **10** | **1** | **53** |
+| **Total** | **40** | **2** | **10** | **1** | **53** |
 
 Sequencing for everything not yet `Done` is in [Plan.md](Plan.md); live status is
 in [Status-Dashboard.md](Status-Dashboard.md).

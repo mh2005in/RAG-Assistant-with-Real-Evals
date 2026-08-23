@@ -291,3 +291,24 @@ class TestProcess:
 
         # Page 1 was excluded, so every surviving chunk must report page 2.
         assert {chunk.page_number for chunk in _stored_chunks(storage)} == {2}
+
+    def test_exclusion_applies_to_every_strategy(
+        self, make_pdf: Callable[[list[str]], bytes]
+    ) -> None:
+        storage = _fake_storage(document_id=1)
+
+        service.process(
+            make_pdf(["DROPME one.", "KEEPME two."]),
+            "report.pdf",
+            "analyst",
+            page_exclusion=PageExclusion.model_validate({"exclude_pages": [1]}),
+            storage=storage,
+        )
+
+        # Exclusion happens once, upstream of chunking, so no strategy may see
+        # the dropped page -- not just the default "fixed" one.
+        for strategy in ("fixed", "semantic", "structural"):
+            chunks = _stored_chunks(storage, strategy)
+            assert chunks, f"{strategy} stored no chunks"
+            assert all(chunk.page_number == 2 for chunk in chunks), strategy
+            assert not any("DROPME" in chunk.text for chunk in chunks), strategy
