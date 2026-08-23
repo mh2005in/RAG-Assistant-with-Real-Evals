@@ -77,6 +77,7 @@ Each stage sits behind a small interface (`Chunker`, `Embedder`, `LLMClient`,
 | DB driver | psycopg 3 + pgvector adapter |
 | Eval scoring | pandas (+ NumPy) for the `/evaluate` retrieval eval |
 | Tests / types / lint | pytest, mypy, Ruff |
+| CI | GitHub Actions (backend gates; mocked frontend E2E) |
 | Local stack | Docker Compose (app + db + Ollama) |
 
 ## Quickstart (Docker)
@@ -328,6 +329,7 @@ frontend/                  Angular web UI (standalone components, Angular 20)
   nginx.conf               SPA fallback + proxies the API paths to app:8000
 docker-compose.yml         frontend + app + Postgres/pgvector + Ollama
 .env.example               shared environment config (Postgres, Ollama, ports)
+.github/workflows/         CI: backend lint/types/fast tests, mocked frontend E2E
 ```
 
 ### Data model
@@ -390,6 +392,15 @@ distinct from its neighbours. On the flat document it has no markers to find,
 falls back to paragraphs and lands with the rest (`-0.21`, against `-0.20`
 semantic) — a structure-aware strategy is only as good as the structure it is
 given.
+
+**CI.** Every pull request touching `backend/**` runs the same gates on GitHub
+Actions, against a lockfile-pinned install: `ruff format --check`, `ruff check`,
+`mypy`, and the fast pytest tier
+([`.github/workflows/backend-ci.yml`](.github/workflows/backend-ci.yml)). The
+integration tests need a live database and are excluded there — the deployed
+stack is verified separately. Pull requests touching `frontend/**` run the mocked
+Playwright suite
+([`.github/workflows/frontend-e2e.yml`](.github/workflows/frontend-e2e.yml)).
 
 **Pre-commit hook:** a gitleaks secret scan runs on commit. Enable the repo's
 hooks in a fresh clone with `git config core.hooksPath .githooks` (requires
