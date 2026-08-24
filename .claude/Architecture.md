@@ -197,7 +197,7 @@ returns. Two dependencies are injected per request:
   thread-safe.
 - `get_llm()` — the Ollama client built from environment.
 
-Both exist so tests can override them with fakes, which is why 137 of the 143
+Both exist so tests can override them with fakes, which is why 140 of the 146
 tests run with no database and no network.
 
 One nuance in `/process`: three of its fields arrive as JSON strings inside a
