@@ -1,7 +1,7 @@
 # Status Dashboard
 
-**As of 2026-08-23** · branch `main` at `203abac` · last merge PR #30
-(delivery-document rule, 2026-08-23)
+**As of 2026-08-23** · branch `main` at `3d1ebc3` · last merge PR #33
+(eval rule and coverage gaps, 2026-08-23)
 
 Derived state — do not hand-edit. Refresh with the `sync-status` skill, which
 re-reads the repository and rewrites this file. Every number below traces to
