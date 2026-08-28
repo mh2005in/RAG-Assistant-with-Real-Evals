@@ -62,3 +62,31 @@ def test_from_env_falls_back_to_defaults(monkeypatch: pytest.MonkeyPatch) -> Non
     monkeypatch.setattr(ollama_module, "Client", MagicMock())
 
     assert OllamaClient.from_env()._model == "gemma2:2b"
+
+
+def test_generate_omits_the_seed_unless_one_was_pinned(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fake_client = MagicMock()
+    fake_client.generate.return_value = SimpleNamespace(response="x")
+    monkeypatch.setattr(ollama_module, "Client", MagicMock(return_value=fake_client))
+
+    OllamaClient(model="gemma2:2b").generate("p")
+
+    # The request path stays unpinned; only a caller that asks for a repeatable
+    # run (the eval harness) gets a seed.
+    assert "seed" not in fake_client.generate.call_args.kwargs["options"]
+
+
+def test_a_pinned_seed_reaches_the_model_options(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fake_client = MagicMock()
+    fake_client.generate.return_value = SimpleNamespace(response="x")
+    monkeypatch.setattr(ollama_module, "Client", MagicMock(return_value=fake_client))
+    monkeypatch.delenv("OLLAMA_MODEL", raising=False)
+    monkeypatch.delenv("OLLAMA_BASE_URL", raising=False)
+
+    OllamaClient.from_env(seed=1234).generate("p")
+
+    assert fake_client.generate.call_args.kwargs["options"]["seed"] == 1234

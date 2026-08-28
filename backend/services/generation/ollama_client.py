@@ -20,30 +20,43 @@ _TEMPERATURE = 0.2
 
 
 class OllamaClient:
-    """Generate completions with a model served by Ollama."""
+    """Generate completions with a model served by Ollama.
 
-    def __init__(self, model: str, base_url: str = _DEFAULT_BASE_URL) -> None:
+    ``seed`` pins the sampler so a run can be repeated exactly. It is left unset in
+    the request path — the eval harness sets it, because a result artifact that
+    changes on every run is not a regenerable one (see CLAUDE.md).
+    """
+
+    def __init__(
+        self, model: str, base_url: str = _DEFAULT_BASE_URL, seed: int | None = None
+    ) -> None:
         self._model = model
+        self._seed = seed
         self._client = Client(host=base_url)
 
     @classmethod
-    def from_env(cls) -> "OllamaClient":
+    def from_env(cls, seed: int | None = None) -> "OllamaClient":
         """Build a client from ``$OLLAMA_BASE_URL`` and ``$OLLAMA_MODEL``.
 
         Both fall back to the docker-compose defaults (localhost:11434, gemma2:2b).
+        ``seed`` is passed through for callers that need a repeatable run.
         """
         return cls(
             model=os.environ.get(_MODEL_ENV_VAR, _DEFAULT_MODEL),
             base_url=os.environ.get(_BASE_URL_ENV_VAR, _DEFAULT_BASE_URL),
+            seed=seed,
         )
 
     def generate(self, prompt: str) -> str:
         """Return the model's completion for ``prompt`` (non-streaming)."""
+        options: dict[str, float | int] = {"temperature": _TEMPERATURE}
+        if self._seed is not None:
+            options["seed"] = self._seed
         response = self._client.generate(
             model=self._model,
             prompt=prompt,
             stream=False,
-            options={"temperature": _TEMPERATURE},
+            options=options,
         )
         # ``response`` is Optional in the ollama types; treat a missing body as "".
         return (response.response or "").strip()

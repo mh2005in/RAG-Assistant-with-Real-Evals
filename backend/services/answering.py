@@ -53,18 +53,22 @@ class Answering:
                 query=request.query, answer=_NO_CONTEXT_ANSWER, sources=[]
             )
 
-        prompt = self._build_prompt(request.query, retrieved.results)
+        prompt = self.build_prompt(request.query, retrieved.results)
         answer = llm.generate(prompt)
         return AnswerResponse(
             query=request.query, answer=answer, sources=retrieved.results
         )
 
     @staticmethod
-    def _build_prompt(query: str, chunks: list[RetrievedChunk]) -> str:
+    def build_prompt(query: str, chunks: list[RetrievedChunk]) -> str:
         """Build the augmented prompt: the retrieved chunks as cited context.
 
         Each chunk is numbered and tagged with its document and page so the model
         can cite it (e.g. ``[1]``).
+
+        Public because the answer-faithfulness eval generates through the *shipped*
+        prompt (``evals/answer_faithfulness_eval.py``) — a copy of it there would
+        measure a prompt this service does not use.
         """
         context = "\n".join(
             f"[{index}] ({chunk.document_name}, p.{chunk.page_number}) {chunk.text}"

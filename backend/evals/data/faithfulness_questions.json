@@ -1,0 +1,15 @@
+{
+  "_comment": "Questions for the answer-faithfulness eval, one list per dataset in evals/data/. Deliberately question-only: faithfulness asks whether an answer is grounded in its retrieved context, not whether it is correct, so no reference answers are needed and none are collected. Every question is answerable from its document, so a low score means the generator drifted, not that the document was silent.",
+  "sample.txt": [
+    "What problem does retrieval-augmented generation solve?",
+    "Why does the size of a chunk matter for retrieval?",
+    "What is the main weakness of fixed-size chunking?",
+    "Why is fixed-size chunking treated as a baseline?"
+  ],
+  "structured_sample.txt": [
+    "What happens to a page that is excluded before chunking?",
+    "How does the semantic strategy decide where to split a document?",
+    "How is access control enforced when chunks are searched?",
+    "What is stored alongside each chunk in the vector store?"
+  ]
+}

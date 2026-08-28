@@ -312,10 +312,10 @@ backend/                   the Python/RAG service (run uv commands from here)
     answering.py           /answer: retrieve → augment prompt → generate
     chunking/              Chunker interface + fixed-size, semantic, structural
     embedding/             Embedder interface + Ollama backend
-    generation/            LLMClient interface + Ollama backend
+    generation/            LLMClient interface + Ollama backend + answer-faithfulness metric
     storage/               PostgresStorage (pgvector reads/writes)
   db/schema.sql            documents + chunks tables, FK + HNSW cosine index
-  evals/                   reproducible evals (chunking strategy comparison, flat + structured samples)
+  evals/                   reproducible evals (chunking comparison, answer faithfulness)
   tests/                   pytest: fast offline units + DB integration (marked)
   Dockerfile               app image (uv, uvicorn)
   pyproject.toml, uv.lock  dependencies + pinned lockfile
@@ -379,6 +379,7 @@ comparison embeds sentences, so it needs the Ollama service running (run from
 ```bash
 uv run python -m evals.fixed_size_chunking_eval    # fixed-size baseline sweep
 uv run python -m evals.chunking_strategies_eval    # fixed vs semantic vs structural
+uv run python -m evals.answer_faithfulness_eval    # is a generated answer grounded?
 ```
 
 The comparison runs every strategy over two documents — flat prose
@@ -392,6 +393,63 @@ distinct from its neighbours. On the flat document it has no markers to find,
 falls back to paragraphs and lands with the rest (`-0.21`, against `-0.20`
 semantic) — a structure-aware strategy is only as good as the structure it is
 given.
+
+### Answer faithfulness: is the answer grounded?
+
+`/answer` tells the model to use only the retrieved context and to cite it. That
+it *does* is a quality claim, so it is measured rather than asserted
+(`services/generation/faithfulness.py`). The answer is split into sentence-level
+claims, each claim is embedded, and it counts as grounded when it is close enough
+to a **context sentence** — not to a whole chunk, whose embedding is dominated by
+its general topic and will happily match an invented claim on the right subject.
+No LLM judge is involved, so the eval stays deterministic, free and offline, the
+same reasoning that keeps `/evaluate` LLM-free.
+
+A faithfulness score on its own proves nothing, so every question is answered
+three ways — changing only what the generator is shown — and all three are scored
+against the *same* context. `distractor` gets the least similar chunks in the
+document; `closed_book` gets none at all and is a control, not a code path
+(`/answer` never generates without context):
+
+| condition | faithfulness | mean support |
+| --- | --- | --- |
+| **grounded** | **0.92** / **1.00** | **0.92** / **0.85** |
+| closed_book | 0.42 / 0.19 | 0.70 / 0.68 |
+| distractor | 0.58 / 0.00 | 0.76 / 0.51 |
+
+*(`sample.txt` / `structured_sample.txt`; gemma2:2b, `nomic-embed-text`
+embeddings. Regenerate with the command above.)*
+
+Grounded answers sit above both controls on both metrics, on both documents —
+that separation is what says the measurement works. The two controls do **not**
+hold a stable order against each other: `distractor` scores above `closed_book`
+on `sample.txt` and below it on `structured_sample.txt`, and the pair swapped
+between runs as well. So the grounded-vs-ungrounded gap is the finding; the
+ranking *among* the ungrounded conditions is noise at this sample size, and is
+not evidence of anything.
+
+**Read one run as one sample.** Generation is seeded, which narrows the spread but
+does not make it bit-identical — across repeat runs the flat document's
+`faithfulness` moved by up to 0.33, while the ordering above held every time. The
+ordering is the finding; the digits are not.
+
+Three things worth naming:
+
+- **Citations are valid but rare.** Across ~100 scored claims the model never
+  cited a chunk that was not in its context (`citation_validity` 1.00) — but it
+  cited anything at all on only a quarter of grounded claims. The prompt asks for
+  citations and mostly does not get them, which is a prompt finding, not a
+  metric one.
+- **`cited_support` is the noisiest number** in the table, precisely because
+  coverage is that low: it averages over one or two claims per condition, so it
+  is omitted above and read from the artifact rather than leaned on.
+- **The support threshold is calibrated, not guessed.** The eval sweeps it every
+  run and records the sweep in the artifact. `0.75` is the highest cut that still
+  accepts essentially every grounded claim; a higher cut can show a wider
+  grounded-vs-distractor gap purely by rejecting real grounding, which is why the
+  gap is a check and not the objective. It is specific to `nomic-embed-text` and
+  fitted on a small set — which is why `mean_support`, needing no threshold, is
+  the number to trust.
 
 **CI.** Every pull request touching `backend/**` runs the same gates on GitHub
 Actions, against a lockfile-pinned install: `ruff format --check`, `ruff check`,
@@ -481,15 +539,18 @@ Planned but **not yet implemented**:
   `access_role`.
 - **Extraction:** OCR (Tesseract) and richer extraction (Docling); non-PDF types.
 - **Web scraping:** Firecrawl / headless-browser / BeautifulSoup ingestion.
-- **More evals:** embedding/retrieval quality (recall@k / MRR) and
-  answer-faithfulness for generation.
+- **More evals:** embedding/retrieval quality (recall@k / MRR). Answer
+  faithfulness for generation has shipped — see
+  [Answer faithfulness](#answer-faithfulness-is-the-answer-grounded).
 - **Validation:** LLM-based output validation alongside the Pydantic schemas.
 
 ## Proposal: LLM-judge evaluation with RAGAS
 
 > **Status: proposal — not implemented.** This section sketches an *optional*,
 > deeper evaluation that would run **alongside** (not replace) the current
-> embedding-similarity `/evaluate`. Nothing here exists in the code yet.
+> embedding-similarity `/evaluate` and the embedding-based
+> [answer-faithfulness eval](#answer-faithfulness-is-the-answer-grounded). No
+> RAGAS code exists in the repo.
 
 ### Why consider it
 
@@ -498,9 +559,17 @@ match a caller-supplied expected answer, using only local embeddings — cheap,
 reproducible, and LLM-free (see [Using the API](#using-the-api)). What it *cannot*
 see is **answer quality**: whether an answer *generated* from the retrieved
 context is faithful (grounded, no hallucination) and actually relevant to the
-question. [RAGAS](https://docs.ragas.io) is the standard framework for exactly
-those RAG-quality metrics, and it can run **fully locally** against Ollama, so it
-fits the project's open-source, no-external-API constraint.
+question.
+
+Part of that gap is now closed offline:
+[Answer faithfulness](#answer-faithfulness-is-the-answer-grounded) measures
+grounding with embedding similarity between an answer's claims and its context
+sentences. What it still cannot do is read **entailment** — a claim that
+contradicts the context while resembling it scores as supported, and relevancy to
+the question is not measured at all. That is the remaining case for a judge model.
+[RAGAS](https://docs.ragas.io) is the standard framework for those RAG-quality
+metrics, and it can run **fully locally** against Ollama, so it fits the project's
+open-source, no-external-API constraint.
 
 ### What RAGAS would add
 

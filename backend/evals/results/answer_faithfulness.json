@@ -1,0 +1,1437 @@
+{
+  "embedding_model": "nomic-embed-text",
+  "generation_model": "gemma2:2b",
+  "seed": 20260828,
+  "chunking": {
+    "strategy": "fixed",
+    "chunk_size": 64
+  },
+  "top_k": 2,
+  "support_threshold": 0.75,
+  "datasets": [
+    {
+      "dataset": "sample.txt",
+      "document_words": 273,
+      "chunks": 5,
+      "questions": 4,
+      "conditions": [
+        {
+          "condition": "grounded",
+          "faithfulness": 0.9167,
+          "mean_support": 0.9245,
+          "citation_coverage": 0.1667,
+          "citation_validity": 1.0,
+          "cited_support": 0.4663,
+          "claims": 1.75
+        },
+        {
+          "condition": "distractor",
+          "faithfulness": 0.5833,
+          "mean_support": 0.7583,
+          "citation_coverage": 0.4167,
+          "citation_validity": 1.0,
+          "cited_support": 0.7475,
+          "claims": 1.5
+        },
+        {
+          "condition": "closed_book",
+          "faithfulness": 0.4187,
+          "mean_support": 0.6991,
+          "citation_coverage": 0.0,
+          "citation_validity": null,
+          "cited_support": null,
+          "claims": 8.25
+        }
+      ]
+    },
+    {
+      "dataset": "structured_sample.txt",
+      "document_words": 556,
+      "chunks": 9,
+      "questions": 4,
+      "conditions": [
+        {
+          "condition": "grounded",
+          "faithfulness": 1.0,
+          "mean_support": 0.8485,
+          "citation_coverage": 0.25,
+          "citation_validity": 1.0,
+          "cited_support": 0.7505,
+          "claims": 1.0
+        },
+        {
+          "condition": "distractor",
+          "faithfulness": 0.0,
+          "mean_support": 0.5129,
+          "citation_coverage": 0.5,
+          "citation_validity": 1.0,
+          "cited_support": 0.3631,
+          "claims": 1.0
+        },
+        {
+          "condition": "closed_book",
+          "faithfulness": 0.1879,
+          "mean_support": 0.6774,
+          "citation_coverage": 0.0,
+          "citation_validity": null,
+          "cited_support": null,
+          "claims": 13.25
+        }
+      ]
+    }
+  ],
+  "threshold_sweep": [
+    {
+      "threshold": 0.55,
+      "grounded": 1.0,
+      "distractor": 0.7,
+      "closed_book": 0.9535,
+      "gap": 0.3
+    },
+    {
+      "threshold": 0.6,
+      "grounded": 0.9091,
+      "distractor": 0.6,
+      "closed_book": 0.8023,
+      "gap": 0.3091
+    },
+    {
+      "threshold": 0.65,
+      "grounded": 0.9091,
+      "distractor": 0.6,
+      "closed_book": 0.6047,
+      "gap": 0.3091
+    },
+    {
+      "threshold": 0.7,
+      "grounded": 0.9091,
+      "distractor": 0.6,
+      "closed_book": 0.4186,
+      "gap": 0.3091
+    },
+    {
+      "threshold": 0.75,
+      "grounded": 0.9091,
+      "distractor": 0.3,
+      "closed_book": 0.2674,
+      "gap": 0.6091
+    },
+    {
+      "threshold": 0.8,
+      "grounded": 0.6364,
+      "distractor": 0.2,
+      "closed_book": 0.1395,
+      "gap": 0.4364
+    },
+    {
+      "threshold": 0.85,
+      "grounded": 0.6364,
+      "distractor": 0.0,
+      "closed_book": 0.0581,
+      "gap": 0.6364
+    }
+  ],
+  "answers": [
+    {
+      "dataset": "sample.txt",
+      "runs": [
+        {
+          "question": "What problem does retrieval-augmented generation solve?",
+          "condition": "grounded",
+          "answer": "Retrieval-augmented generation grounds a language model in an external knowledge base so that answers can cite real source material instead of relying solely on parametric memory. [1]",
+          "claims": 1,
+          "faithfulness": 1.0,
+          "mean_support": 1.0,
+          "citation_coverage": 0.0,
+          "citation_validity": null,
+          "cited_support": null,
+          "supports": [
+            {
+              "claim": "Retrieval-augmented generation grounds a language model in an external knowledge base so that answers can cite real source material instead of relying solely on parametric memory.",
+              "support": 1.0,
+              "supported": true,
+              "best_chunk": 1,
+              "citations": [],
+              "invalid_citations": [],
+              "cited_support": null
+            }
+          ]
+        },
+        {
+          "question": "What problem does retrieval-augmented generation solve?",
+          "condition": "distractor",
+          "answer": "This document doesn't provide information about what retrieval-augmented generation solves. [2]",
+          "claims": 1,
+          "faithfulness": 1.0,
+          "mean_support": 0.7731,
+          "citation_coverage": 0.0,
+          "citation_validity": null,
+          "cited_support": null,
+          "supports": [
+            {
+              "claim": "This document doesn't provide information about what retrieval-augmented generation solves.",
+              "support": 0.7731,
+              "supported": true,
+              "best_chunk": 1,
+              "citations": [],
+              "invalid_citations": [],
+              "cited_support": null
+            }
+          ]
+        },
+        {
+          "question": "What problem does retrieval-augmented generation solve?",
+          "condition": "closed_book",
+          "answer": "Retrieval-augmented generation solves the problem of **lacking sufficient context and information for accurate and coherent text generation**. \n\nHere's a breakdown:\n\n* **Traditional language models (like GPT-3) struggle with:**  Understanding complex prompts, generating creative content, and providing nuanced responses. They often rely on memorizing patterns from their training data, which can lead to repetitive or generic outputs.\n* **Retrieval-augmented generation addresses this by:** Combining the powerful text generation capabilities of language models with a vast knowledge base (like a massive database) to retrieve relevant information. This allows the model to: \n    *  Generate more accurate and contextually appropriate responses.\n    *  Create more creative and original content.\n    *  Provide deeper insights and analysis based on real-world information.\n\nEssentially, retrieval-augmented generation bridges the gap between language models' ability to generate text and their need for comprehensive understanding of the world around them.",
+          "claims": 8,
+          "faithfulness": 0.375,
+          "mean_support": 0.726,
+          "citation_coverage": 0.0,
+          "citation_validity": null,
+          "cited_support": null,
+          "supports": [
+            {
+              "claim": "Retrieval-augmented generation solves the problem of **lacking sufficient context and information for accurate and coherent text generation**.",
+              "support": 0.8762,
+              "supported": true,
+              "best_chunk": 1,
+              "citations": [],
+              "invalid_citations": [],
+              "cited_support": null
+            },
+            {
+              "claim": "Here's a breakdown: * **Traditional language models (like GPT-3) struggle with:** Understanding complex prompts, generating creative content, and providing nuanced responses.",
+              "support": 0.6317,
+              "supported": false,
+              "best_chunk": 1,
+              "citations": [],
+              "invalid_citations": [],
+              "cited_support": null
+            },
+            {
+              "claim": "They often rely on memorizing patterns from their training data, which can lead to repetitive or generic outputs.",
+              "support": 0.5937,
+              "supported": false,
+              "best_chunk": 1,
+              "citations": [],
+              "invalid_citations": [],
+              "cited_support": null
+            },
+            {
+              "claim": "* **Retrieval-augmented generation addresses this by:** Combining the powerful text generation capabilities of language models with a vast knowledge base (like a massive database) to retrieve relevant information.",
+              "support": 0.9143,
+              "supported": true,
+              "best_chunk": 1,
+              "citations": [],
+              "invalid_citations": [],
+              "cited_support": null
+            },
+            {
+              "claim": "This allows the model to: * Generate more accurate and contextually appropriate responses.",
+              "support": 0.6752,
+              "supported": false,
+              "best_chunk": 1,
+              "citations": [],
+              "invalid_citations": [],
+              "cited_support": null
+            },
+            {
+              "claim": "* Create more creative and original content.",
+              "support": 0.5609,
+              "supported": false,
+              "best_chunk": 1,
+              "citations": [],
+              "invalid_citations": [],
+              "cited_support": null
+            },
+            {
+              "claim": "* Provide deeper insights and analysis based on real-world information.",
+              "support": 0.6696,
+              "supported": false,
+              "best_chunk": 1,
+              "citations": [],
+              "invalid_citations": [],
+              "cited_support": null
+            },
+            {
+              "claim": "Essentially, retrieval-augmented generation bridges the gap between language models' ability to generate text and their need for comprehensive understanding of the world around them.",
+              "support": 0.8866,
+              "supported": true,
+              "best_chunk": 1,
+              "citations": [],
+              "invalid_citations": [],
+              "cited_support": null
+            }
+          ]
+        },
+        {
+          "question": "Why does the size of a chunk matter for retrieval?",
+          "condition": "grounded",
+          "answer": "The size of a chunk matters because it determines what the retriever can find and how much irrelevant context it drags along. Chunks that are too large dilute the signal and waste the context window; chunks that are too small fracture ideas across boundaries and lose the surrounding meaning a reader needs to make sense of a passage. [1]",
+          "claims": 2,
+          "faithfulness": 1.0,
+          "mean_support": 0.8929,
+          "citation_coverage": 0.0,
+          "citation_validity": null,
+          "cited_support": null,
+          "supports": [
+            {
+              "claim": "The size of a chunk matters because it determines what the retriever can find and how much irrelevant context it drags along.",
+              "support": 0.7858,
+              "supported": true,
+              "best_chunk": 2,
+              "citations": [],
+              "invalid_citations": [],
+              "cited_support": null
+            },
+            {
+              "claim": "Chunks that are too large dilute the signal and waste the context window; chunks that are too small fracture ideas across boundaries and lose the surrounding meaning a reader needs to make sense of a passage.",
+              "support": 1.0,
+              "supported": true,
+              "best_chunk": 2,
+              "citations": [],
+              "invalid_citations": [],
+              "cited_support": null
+            }
+          ]
+        },
+        {
+          "question": "Why does the size of a chunk matter for retrieval?",
+          "condition": "distractor",
+          "answer": "The size of a chunk matters because it affects predictability and how well the document is partitioned.  [2]",
+          "claims": 1,
+          "faithfulness": 0.0,
+          "mean_support": 0.7196,
+          "citation_coverage": 0.0,
+          "citation_validity": null,
+          "cited_support": null,
+          "supports": [
+            {
+              "claim": "The size of a chunk matters because it affects predictability and how well the document is partitioned.",
+              "support": 0.7196,
+              "supported": false,
+              "best_chunk": 2,
+              "citations": [],
+              "invalid_citations": [],
+              "cited_support": null
+            }
+          ]
+        },
+        {
+          "question": "Why does the size of a chunk matter for retrieval?",
+          "condition": "closed_book",
+          "answer": "The size of a chunk matters for retrieval because it impacts **how efficiently and accurately data is processed and matched** during the search process. \n\nHere's why:\n\n* **Chunking divides information into manageable pieces:**  Instead of processing an entire document or dataset at once, chunks allow us to break down large amounts of data into smaller units. This makes searching more manageable and faster.\n* **Chunking improves efficiency:** Smaller chunks require less computational power and memory, leading to quicker retrieval times. \n* **Chunking facilitates better matching:**  When a query is processed in chunks, the algorithm can focus on finding relevant information within each chunk before moving to the next. This helps with more accurate results by reducing irrelevant data being considered.\n\n**However, there's a trade-off:**\n\n* **Larger chunks may lead to less accuracy:** If the chunks are too large, they might miss crucial details or contain irrelevant information that could hinder retrieval accuracy. \n* **Smaller chunks can increase computational cost:**  Processing smaller chunks requires more processing power and memory, potentially leading to slower retrieval times if not optimized efficiently.\n\n\n**In summary,** the optimal chunk size depends on the specific application and data being searched. It's crucial to find a balance between efficiency and accuracy to ensure effective retrieval.",
+          "claims": 10,
+          "faithfulness": 0.3,
+          "mean_support": 0.701,
+          "citation_coverage": 0.0,
+          "citation_validity": null,
+          "cited_support": null,
+          "supports": [
+            {
+              "claim": "The size of a chunk matters for retrieval because it impacts **how efficiently and accurately data is processed and matched** during the search process.",
+              "support": 0.6863,
+              "supported": false,
+              "best_chunk": 2,
+              "citations": [],
+              "invalid_citations": [],
+              "cited_support": null
+            },
+            {
+              "claim": "Here's why: * **Chunking divides information into manageable pieces:** Instead of processing an entire document or dataset at once, chunks allow us to break down large amounts of data into smaller units.",
+              "support": 0.7519,
+              "supported": true,
+              "best_chunk": 2,
+              "citations": [],
+              "invalid_citations": [],
+              "cited_support": null
+            },
+            {
+              "claim": "This makes searching more manageable and faster.",
+              "support": 0.5948,
+              "supported": false,
+              "best_chunk": 1,
+              "citations": [],
+              "invalid_citations": [],
+              "cited_support": null
+            },
+            {
+              "claim": "* **Chunking improves efficiency:** Smaller chunks require less computational power and memory, leading to quicker retrieval times.",
+              "support": 0.7613,
+              "supported": true,
+              "best_chunk": 2,
+              "citations": [],
+              "invalid_citations": [],
+              "cited_support": null
+            },
+            {
+              "claim": "* **Chunking facilitates better matching:** When a query is processed in chunks, the algorithm can focus on finding relevant information within each chunk before moving to the next.",
+              "support": 0.7452,
+              "supported": false,
+              "best_chunk": 2,
+              "citations": [],
+              "invalid_citations": [],
+              "cited_support": null
+            },
+            {
+              "claim": "This helps with more accurate results by reducing irrelevant data being considered.",
+              "support": 0.5908,
+              "supported": false,
+              "best_chunk": 2,
+              "citations": [],
+              "invalid_citations": [],
+              "cited_support": null
+            },
+            {
+              "claim": "**However, there's a trade-off:** * **Larger chunks may lead to less accuracy:** If the chunks are too large, they might miss crucial details or contain irrelevant information that could hinder retrieval accuracy.",
+              "support": 0.7841,
+              "supported": true,
+              "best_chunk": 2,
+              "citations": [],
+              "invalid_citations": [],
+              "cited_support": null
+            },
+            {
+              "claim": "* **Smaller chunks can increase computational cost:** Processing smaller chunks requires more processing power and memory, potentially leading to slower retrieval times if not optimized efficiently.",
+              "support": 0.721,
+              "supported": false,
+              "best_chunk": 2,
+              "citations": [],
+              "invalid_citations": [],
+              "cited_support": null
+            },
+            {
+              "claim": "**In summary,** the optimal chunk size depends on the specific application and data being searched.",
+              "support": 0.7082,
+              "supported": false,
+              "best_chunk": 2,
+              "citations": [],
+              "invalid_citations": [],
+              "cited_support": null
+            },
+            {
+              "claim": "It's crucial to find a balance between efficiency and accuracy to ensure effective retrieval.",
+              "support": 0.6664,
+              "supported": false,
+              "best_chunk": 1,
+              "citations": [],
+              "invalid_citations": [],
+              "cited_support": null
+            }
+          ]
+        },
+        {
+          "question": "What is the main weakness of fixed-size chunking?",
+          "condition": "grounded",
+          "answer": "Fixed-size chunking is the simplest strategy. It ignores sentence, paragraph, and section [1]. \n\n\n[1] (sample.txt, p.1)",
+          "claims": 3,
+          "faithfulness": 0.6667,
+          "mean_support": 0.8501,
+          "citation_coverage": 0.6667,
+          "citation_validity": 1.0,
+          "cited_support": 0.4663,
+          "supports": [
+            {
+              "claim": "Fixed-size chunking is the simplest strategy.",
+              "support": 1.0,
+              "supported": true,
+              "best_chunk": 2,
+              "citations": [],
+              "invalid_citations": [],
+              "cited_support": null
+            },
+            {
+              "claim": "It ignores sentence, paragraph, and section.",
+              "support": 0.994,
+              "supported": true,
+              "best_chunk": 2,
+              "citations": [
+                1
+              ],
+              "invalid_citations": [],
+              "cited_support": 0.4322
+            },
+            {
+              "claim": "(sample.txt, p.1)",
+              "support": 0.5564,
+              "supported": false,
+              "best_chunk": 2,
+              "citations": [
+                1
+              ],
+              "invalid_citations": [],
+              "cited_support": 0.5005
+            }
+          ]
+        },
+        {
+          "question": "What is the main weakness of fixed-size chunking?",
+          "condition": "distractor",
+          "answer": "Fixed-size chunking has the disadvantage that it lacks flexibility in adjusting to different document lengths and complexities, leading to suboptimal performance [2].",
+          "claims": 1,
+          "faithfulness": 1.0,
+          "mean_support": 0.8305,
+          "citation_coverage": 1.0,
+          "citation_validity": 1.0,
+          "cited_support": 0.8305,
+          "supports": [
+            {
+              "claim": "Fixed-size chunking has the disadvantage that it lacks flexibility in adjusting to different document lengths and complexities, leading to suboptimal performance.",
+              "support": 0.8305,
+              "supported": true,
+              "best_chunk": 2,
+              "citations": [
+                2
+              ],
+              "invalid_citations": [],
+              "cited_support": 0.8305
+            }
+          ]
+        },
+        {
+          "question": "What is the main weakness of fixed-size chunking?",
+          "condition": "closed_book",
+          "answer": "The main weakness of fixed-size chunking is its **inability to adapt to varying levels of complexity or information density**.  \n\nHere's why:\n\n* **Fixed chunk size:** This method divides information into pre-determined chunks, often based on arbitrary units like syllables or words. \n* **Limited flexibility:** When the information being processed changes (e.g., a complex sentence with multiple clauses), the fixed chunk size might not accurately represent the actual complexity of the information.  This can lead to:\n    * **Difficulty in processing long, complex sentences.**\n    * **Loss of context and meaning due to mismatched chunks.** \n\n**Alternatives:** Techniques like variable-size chunking or dynamic chunking address this weakness by adjusting chunk size based on the content's complexity. This allows for a more accurate representation of information density and improved comprehension. \n\n\nLet me know if you have any other questions!",
+          "claims": 6,
+          "faithfulness": 0.6667,
+          "mean_support": 0.6938,
+          "citation_coverage": 0.0,
+          "citation_validity": null,
+          "cited_support": null,
+          "supports": [
+            {
+              "claim": "The main weakness of fixed-size chunking is its **inability to adapt to varying levels of complexity or information density**.",
+              "support": 0.847,
+              "supported": true,
+              "best_chunk": 2,
+              "citations": [],
+              "invalid_citations": [],
+              "cited_support": null
+            },
+            {
+              "claim": "Here's why: * **Fixed chunk size:** This method divides information into pre-determined chunks, often based on arbitrary units like syllables or words.",
+              "support": 0.7995,
+              "supported": true,
+              "best_chunk": 1,
+              "citations": [],
+              "invalid_citations": [],
+              "cited_support": null
+            },
+            {
+              "claim": "* **Limited flexibility:** When the information being processed changes (e.g., a complex sentence with multiple clauses), the fixed chunk size might not accurately represent the actual complexity of the information.",
+              "support": 0.7522,
+              "supported": true,
+              "best_chunk": 2,
+              "citations": [],
+              "invalid_citations": [],
+              "cited_support": null
+            },
+            {
+              "claim": "This can lead to: * **Difficulty in processing long, complex sentences.** * **Loss of context and meaning due to mismatched chunks.** **Alternatives:** Techniques like variable-size chunking or dynamic chunking address this weakness by adjusting chunk size based on the content's complexity.",
+              "support": 0.8066,
+              "supported": true,
+              "best_chunk": 2,
+              "citations": [],
+              "invalid_citations": [],
+              "cited_support": null
+            },
+            {
+              "claim": "This allows for a more accurate representation of information density and improved comprehension.",
+              "support": 0.5877,
+              "supported": false,
+              "best_chunk": 2,
+              "citations": [],
+              "invalid_citations": [],
+              "cited_support": null
+            },
+            {
+              "claim": "Let me know if you have any other questions!",
+              "support": 0.3701,
+              "supported": false,
+              "best_chunk": 2,
+              "citations": [],
+              "invalid_citations": [],
+              "cited_support": null
+            }
+          ]
+        },
+        {
+          "question": "Why is fixed-size chunking treated as a baseline?",
+          "condition": "grounded",
+          "answer": "Fixed-size chunking is treated as a baseline because it is so simple. [1]",
+          "claims": 1,
+          "faithfulness": 1.0,
+          "mean_support": 0.955,
+          "citation_coverage": 0.0,
+          "citation_validity": null,
+          "cited_support": null,
+          "supports": [
+            {
+              "claim": "Fixed-size chunking is treated as a baseline because it is so simple.",
+              "support": 0.955,
+              "supported": true,
+              "best_chunk": 1,
+              "citations": [],
+              "invalid_citations": [],
+              "cited_support": null
+            }
+          ]
+        },
+        {
+          "question": "Why is fixed-size chunking treated as a baseline?",
+          "condition": "distractor",
+          "answer": "Fixed-size chunking is treated as a baseline because it offers predictability in text partitioning [1]. Every chunk except the last has the same size, making throughput easy to reason about and minimizing surprises in document segmentation. \n\n\n[1] (sample.txt, p.1)",
+          "claims": 3,
+          "faithfulness": 0.3333,
+          "mean_support": 0.7101,
+          "citation_coverage": 0.6667,
+          "citation_validity": 1.0,
+          "cited_support": 0.6646,
+          "supports": [
+            {
+              "claim": "Fixed-size chunking is treated as a baseline because it offers predictability in text partitioning.",
+              "support": 0.8288,
+              "supported": true,
+              "best_chunk": 1,
+              "citations": [
+                1
+              ],
+              "invalid_citations": [],
+              "cited_support": 0.8288
+            },
+            {
+              "claim": "Every chunk except the last has the same size, making throughput easy to reason about and minimizing surprises in document segmentation.",
+              "support": 0.7451,
+              "supported": false,
+              "best_chunk": 2,
+              "citations": [],
+              "invalid_citations": [],
+              "cited_support": null
+            },
+            {
+              "claim": "(sample.txt, p.1)",
+              "support": 0.5564,
+              "supported": false,
+              "best_chunk": 2,
+              "citations": [
+                1
+              ],
+              "invalid_citations": [],
+              "cited_support": 0.5005
+            }
+          ]
+        },
+        {
+          "question": "Why is fixed-size chunking treated as a baseline?",
+          "condition": "closed_book",
+          "answer": "Fixed-size chunking is treated as a baseline in machine learning because it serves as a **simple and easily implemented benchmark** for comparing other techniques. \n\nHere's why:\n\n* **Simplicity:** It's straightforward to implement, requiring only dividing the input text into fixed-sized chunks. This makes it easy to compare against more complex methods without needing extensive computational resources or intricate model architectures.\n* **Baseline Performance:**  It provides a starting point for understanding how well models perform on tasks like language modeling and machine translation. By comparing its performance with other techniques, researchers can gauge the effectiveness of more sophisticated approaches. \n* **Understanding Limitations:** Fixed-size chunking highlights limitations in the data representation and model learning process. It helps identify areas where larger chunks or different chunk sizes might be beneficial for better performance.\n\nWhile fixed-size chunking may not always achieve optimal results, it serves as a valuable starting point to understand the fundamental principles of text processing and compare them against more advanced methods. \n\n\nLet me know if you'd like further details on any aspect of this!",
+          "claims": 9,
+          "faithfulness": 0.3333,
+          "mean_support": 0.6758,
+          "citation_coverage": 0.0,
+          "citation_validity": null,
+          "cited_support": null,
+          "supports": [
+            {
+              "claim": "Fixed-size chunking is treated as a baseline in machine learning because it serves as a **simple and easily implemented benchmark** for comparing other techniques.",
+              "support": 0.8597,
+              "supported": true,
+              "best_chunk": 1,
+              "citations": [],
+              "invalid_citations": [],
+              "cited_support": null
+            },
+            {
+              "claim": "Here's why: * **Simplicity:** It's straightforward to implement, requiring only dividing the input text into fixed-sized chunks.",
+              "support": 0.7619,
+              "supported": true,
+              "best_chunk": 1,
+              "citations": [],
+              "invalid_citations": [],
+              "cited_support": null
+            },
+            {
+              "claim": "This makes it easy to compare against more complex methods without needing extensive computational resources or intricate model architectures.",
+              "support": 0.6201,
+              "supported": false,
+              "best_chunk": 1,
+              "citations": [],
+              "invalid_citations": [],
+              "cited_support": null
+            },
+            {
+              "claim": "* **Baseline Performance:** It provides a starting point for understanding how well models perform on tasks like language modeling and machine translation.",
+              "support": 0.6018,
+              "supported": false,
+              "best_chunk": 1,
+              "citations": [],
+              "invalid_citations": [],
+              "cited_support": null
+            },
+            {
+              "claim": "By comparing its performance with other techniques, researchers can gauge the effectiveness of more sophisticated approaches.",
+              "support": 0.5833,
+              "supported": false,
+              "best_chunk": 1,
+              "citations": [],
+              "invalid_citations": [],
+              "cited_support": null
+            },
+            {
+              "claim": "* **Understanding Limitations:** Fixed-size chunking highlights limitations in the data representation and model learning process.",
+              "support": 0.7409,
+              "supported": false,
+              "best_chunk": 2,
+              "citations": [],
+              "invalid_citations": [],
+              "cited_support": null
+            },
+            {
+              "claim": "It helps identify areas where larger chunks or different chunk sizes might be beneficial for better performance.",
+              "support": 0.6926,
+              "supported": false,
+              "best_chunk": 2,
+              "citations": [],
+              "invalid_citations": [],
+              "cited_support": null
+            },
+            {
+              "claim": "While fixed-size chunking may not always achieve optimal results, it serves as a valuable starting point to understand the fundamental principles of text processing and compare them against more advanced methods.",
+              "support": 0.8032,
+              "supported": true,
+              "best_chunk": 2,
+              "citations": [],
+              "invalid_citations": [],
+              "cited_support": null
+            },
+            {
+              "claim": "Let me know if you'd like further details on any aspect of this!",
+              "support": 0.4191,
+              "supported": false,
+              "best_chunk": 2,
+              "citations": [],
+              "invalid_citations": [],
+              "cited_support": null
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "dataset": "structured_sample.txt",
+      "runs": [
+        {
+          "question": "What happens to a page that is excluded before chunking?",
+          "condition": "grounded",
+          "answer": "A page that is excluded before chunking is kept in its original position [1].",
+          "claims": 1,
+          "faithfulness": 1.0,
+          "mean_support": 0.7819,
+          "citation_coverage": 1.0,
+          "citation_validity": 1.0,
+          "cited_support": 0.7505,
+          "supports": [
+            {
+              "claim": "A page that is excluded before chunking is kept in its original position.",
+              "support": 0.7819,
+              "supported": true,
+              "best_chunk": 2,
+              "citations": [
+                1
+              ],
+              "invalid_citations": [],
+              "cited_support": 0.7505
+            }
+          ]
+        },
+        {
+          "question": "What happens to a page that is excluded before chunking?",
+          "condition": "distractor",
+          "answer": "Don't know [1]",
+          "claims": 1,
+          "faithfulness": 0.0,
+          "mean_support": 0.358,
+          "citation_coverage": 1.0,
+          "citation_validity": 1.0,
+          "cited_support": 0.358,
+          "supports": [
+            {
+              "claim": "Don't know",
+              "support": 0.358,
+              "supported": false,
+              "best_chunk": 1,
+              "citations": [
+                1
+              ],
+              "invalid_citations": [],
+              "cited_support": 0.358
+            }
+          ]
+        },
+        {
+          "question": "What happens to a page that is excluded before chunking?",
+          "condition": "closed_book",
+          "answer": "When a page is excluded before chunking, it **is not included in the resulting chunks**. \n\nHere's why this matters:\n\n* **Chunking:**  This process breaks down a large document into smaller, manageable sections (chunks). This helps with processing and understanding complex information.\n* **Exclusion:** If a page is excluded before chunking, it means its content won't be considered for these chunks. \n\n**Why this happens:**  There are various reasons why a page might be excluded:\n\n* **Relevance:** The page may not align with the overall purpose of the project or the specific chunk creation criteria.\n* **Content type:** The page might contain information that is irrelevant to the intended chunking process (e.g., images, ads). \n* **Technical constraints:**  The page might be too large, complex, or have technical issues that make it unsuitable for chunking.\n\n\nLet me know if you'd like more details on how chunking works!",
+          "claims": 8,
+          "faithfulness": 0.375,
+          "mean_support": 0.7203,
+          "citation_coverage": 0.0,
+          "citation_validity": null,
+          "cited_support": null,
+          "supports": [
+            {
+              "claim": "When a page is excluded before chunking, it **is not included in the resulting chunks**.",
+              "support": 0.8077,
+              "supported": true,
+              "best_chunk": 2,
+              "citations": [],
+              "invalid_citations": [],
+              "cited_support": null
+            },
+            {
+              "claim": "Here's why this matters: * **Chunking:** This process breaks down a large document into smaller, manageable sections (chunks).",
+              "support": 0.6982,
+              "supported": false,
+              "best_chunk": 2,
+              "citations": [],
+              "invalid_citations": [],
+              "cited_support": null
+            },
+            {
+              "claim": "This helps with processing and understanding complex information.",
+              "support": 0.556,
+              "supported": false,
+              "best_chunk": 1,
+              "citations": [],
+              "invalid_citations": [],
+              "cited_support": null
+            },
+            {
+              "claim": "* **Exclusion:** If a page is excluded before chunking, it means its content won't be considered for these chunks.",
+              "support": 0.8417,
+              "supported": true,
+              "best_chunk": 2,
+              "citations": [],
+              "invalid_citations": [],
+              "cited_support": null
+            },
+            {
+              "claim": "**Why this happens:** There are various reasons why a page might be excluded: * **Relevance:** The page may not align with the overall purpose of the project or the specific chunk creation criteria.",
+              "support": 0.7501,
+              "supported": true,
+              "best_chunk": 1,
+              "citations": [],
+              "invalid_citations": [],
+              "cited_support": null
+            },
+            {
+              "claim": "* **Content type:** The page might contain information that is irrelevant to the intended chunking process (e.g., images, ads).",
+              "support": 0.6991,
+              "supported": false,
+              "best_chunk": 1,
+              "citations": [],
+              "invalid_citations": [],
+              "cited_support": null
+            },
+            {
+              "claim": "* **Technical constraints:** The page might be too large, complex, or have technical issues that make it unsuitable for chunking.",
+              "support": 0.6819,
+              "supported": false,
+              "best_chunk": 1,
+              "citations": [],
+              "invalid_citations": [],
+              "cited_support": null
+            },
+            {
+              "claim": "Let me know if you'd like more details on how chunking works!",
+              "support": 0.7279,
+              "supported": false,
+              "best_chunk": 2,
+              "citations": [],
+              "invalid_citations": [],
+              "cited_support": null
+            }
+          ]
+        },
+        {
+          "question": "How does the semantic strategy decide where to split a document?",
+          "condition": "grounded",
+          "answer": "The semantic strategy embeds each sentence and breaks where consecutive sentences drift apart in meaning. [2]",
+          "claims": 1,
+          "faithfulness": 1.0,
+          "mean_support": 0.9618,
+          "citation_coverage": 0.0,
+          "citation_validity": null,
+          "cited_support": null,
+          "supports": [
+            {
+              "claim": "The semantic strategy embeds each sentence and breaks where consecutive sentences drift apart in meaning.",
+              "support": 0.9618,
+              "supported": true,
+              "best_chunk": 1,
+              "citations": [],
+              "invalid_citations": [],
+              "cited_support": null
+            }
+          ]
+        },
+        {
+          "question": "How does the semantic strategy decide where to split a document?",
+          "condition": "distractor",
+          "answer": "This document doesn't contain information about how the semantic strategy decides where to split a document.  [1]",
+          "claims": 1,
+          "faithfulness": 0.0,
+          "mean_support": 0.703,
+          "citation_coverage": 0.0,
+          "citation_validity": null,
+          "cited_support": null,
+          "supports": [
+            {
+              "claim": "This document doesn't contain information about how the semantic strategy decides where to split a document.",
+              "support": 0.703,
+              "supported": false,
+              "best_chunk": 1,
+              "citations": [],
+              "invalid_citations": [],
+              "cited_support": null
+            }
+          ]
+        },
+        {
+          "question": "How does the semantic strategy decide where to split a document?",
+          "condition": "closed_book",
+          "answer": "The semantic strategy for splitting a document doesn't rely on a simple, fixed rule like \"every paragraph\" or \"every 100 words.\" Instead, it uses **context and meaning** to determine the best places to break up the text.  Here's how it works:\n\n**1. Understanding the Document:**\n   * **Topic Modeling:** Semantic strategies use techniques like topic modeling (LDA) to identify the main themes or topics within the document. \n   * **Entity Recognition:** They identify key entities, people, places, and concepts that are important for understanding the content.\n   * **Relationship Extraction:**  They analyze relationships between different parts of the text, such as cause-and-effect, time sequence, or dependencies.\n\n**2. Splitting Decisions:**\n   * **Logical Breaks:** The strategy looks for natural breaks in the text based on these insights: \n      * **Shifting Focus:** When a new topic emerges, a logical break might occur to separate it from the previous one.\n      * **Change in Perspective:**  If the document shifts from describing a single event to discussing its broader implications, a split could be appropriate.\n      * **Emphasis on Key Information:** If certain sections contain crucial information that needs to stand out, they may be separated for clarity. \n   * **Contextual Analysis:** The strategy considers the overall context of the document:\n      * **Audience and Purpose:**  Is this for a general audience or experts? This influences how complex the content should be.\n      * **Document Structure:** Is it a report, article, or something else? Different structures have different natural breaks.\n\n**3. The Result:** \n   * **Improved Understanding:** By breaking up the document into smaller chunks based on meaning and context, users can better understand the information presented.  \n   * **Enhanced Readability:**  The strategy aims to create a more readable experience by separating complex ideas and making them easier to digest.\n\n\n**In short:** Semantic strategies don't just split documents randomly; they use sophisticated techniques to identify meaningful breaks that improve understanding and readability.",
+          "claims": 17,
+          "faithfulness": 0.1765,
+          "mean_support": 0.6694,
+          "citation_coverage": 0.0,
+          "citation_validity": null,
+          "cited_support": null,
+          "supports": [
+            {
+              "claim": "The semantic strategy for splitting a document doesn't rely on a simple, fixed rule like \"every paragraph\" or \"every 100 words.\" Instead, it uses **context and meaning** to determine the best places to break up the text.",
+              "support": 0.7723,
+              "supported": true,
+              "best_chunk": 1,
+              "citations": [],
+              "invalid_citations": [],
+              "cited_support": null
+            },
+            {
+              "claim": "Here's how it works: **1.",
+              "support": 0.5363,
+              "supported": false,
+              "best_chunk": 2,
+              "citations": [],
+              "invalid_citations": [],
+              "cited_support": null
+            },
+            {
+              "claim": "Understanding the Document:** * **Topic Modeling:** Semantic strategies use techniques like topic modeling (LDA) to identify the main themes or topics within the document.",
+              "support": 0.6816,
+              "supported": false,
+              "best_chunk": 1,
+              "citations": [],
+              "invalid_citations": [],
+              "cited_support": null
+            },
+            {
+              "claim": "* **Entity Recognition:** They identify key entities, people, places, and concepts that are important for understanding the content.",
+              "support": 0.6034,
+              "supported": false,
+              "best_chunk": 2,
+              "citations": [],
+              "invalid_citations": [],
+              "cited_support": null
+            },
+            {
+              "claim": "* **Relationship Extraction:** They analyze relationships between different parts of the text, such as cause-and-effect, time sequence, or dependencies.",
+              "support": 0.6086,
+              "supported": false,
+              "best_chunk": 1,
+              "citations": [],
+              "invalid_citations": [],
+              "cited_support": null
+            },
+            {
+              "claim": "**2.",
+              "support": 0.6675,
+              "supported": false,
+              "best_chunk": 2,
+              "citations": [],
+              "invalid_citations": [],
+              "cited_support": null
+            },
+            {
+              "claim": "Splitting Decisions:** * **Logical Breaks:** The strategy looks for natural breaks in the text based on these insights: * **Shifting Focus:** When a new topic emerges, a logical break might occur to separate it from the previous one.",
+              "support": 0.7259,
+              "supported": false,
+              "best_chunk": 1,
+              "citations": [],
+              "invalid_citations": [],
+              "cited_support": null
+            },
+            {
+              "claim": "* **Change in Perspective:** If the document shifts from describing a single event to discussing its broader implications, a split could be appropriate.",
+              "support": 0.6145,
+              "supported": false,
+              "best_chunk": 1,
+              "citations": [],
+              "invalid_citations": [],
+              "cited_support": null
+            },
+            {
+              "claim": "* **Emphasis on Key Information:** If certain sections contain crucial information that needs to stand out, they may be separated for clarity.",
+              "support": 0.637,
+              "supported": false,
+              "best_chunk": 1,
+              "citations": [],
+              "invalid_citations": [],
+              "cited_support": null
+            },
+            {
+              "claim": "* **Contextual Analysis:** The strategy considers the overall context of the document: * **Audience and Purpose:** Is this for a general audience or experts?",
+              "support": 0.6345,
+              "supported": false,
+              "best_chunk": 1,
+              "citations": [],
+              "invalid_citations": [],
+              "cited_support": null
+            },
+            {
+              "claim": "This influences how complex the content should be.",
+              "support": 0.6135,
+              "supported": false,
+              "best_chunk": 1,
+              "citations": [],
+              "invalid_citations": [],
+              "cited_support": null
+            },
+            {
+              "claim": "* **Document Structure:** Is it a report, article, or something else?",
+              "support": 0.6934,
+              "supported": false,
+              "best_chunk": 1,
+              "citations": [],
+              "invalid_citations": [],
+              "cited_support": null
+            },
+            {
+              "claim": "Different structures have different natural breaks.",
+              "support": 0.5668,
+              "supported": false,
+              "best_chunk": 1,
+              "citations": [],
+              "invalid_citations": [],
+              "cited_support": null
+            },
+            {
+              "claim": "**3.",
+              "support": 0.8782,
+              "supported": true,
+              "best_chunk": 2,
+              "citations": [],
+              "invalid_citations": [],
+              "cited_support": null
+            },
+            {
+              "claim": "The Result:** * **Improved Understanding:** By breaking up the document into smaller chunks based on meaning and context, users can better understand the information presented.",
+              "support": 0.63,
+              "supported": false,
+              "best_chunk": 1,
+              "citations": [],
+              "invalid_citations": [],
+              "cited_support": null
+            },
+            {
+              "claim": "* **Enhanced Readability:** The strategy aims to create a more readable experience by separating complex ideas and making them easier to digest.",
+              "support": 0.692,
+              "supported": false,
+              "best_chunk": 1,
+              "citations": [],
+              "invalid_citations": [],
+              "cited_support": null
+            },
+            {
+              "claim": "**In short:** Semantic strategies don't just split documents randomly; they use sophisticated techniques to identify meaningful breaks that improve understanding and readability.",
+              "support": 0.8241,
+              "supported": true,
+              "best_chunk": 1,
+              "citations": [],
+              "invalid_citations": [],
+              "cited_support": null
+            }
+          ]
+        },
+        {
+          "question": "How is access control enforced when chunks are searched?",
+          "condition": "grounded",
+          "answer": "Access control is enforced in the query rather than after the results come back. [1]",
+          "claims": 1,
+          "faithfulness": 1.0,
+          "mean_support": 0.7651,
+          "citation_coverage": 0.0,
+          "citation_validity": null,
+          "cited_support": null,
+          "supports": [
+            {
+              "claim": "Access control is enforced in the query rather than after the results come back.",
+              "support": 0.7651,
+              "supported": true,
+              "best_chunk": 1,
+              "citations": [],
+              "invalid_citations": [],
+              "cited_support": null
+            }
+          ]
+        },
+        {
+          "question": "How is access control enforced when chunks are searched?",
+          "condition": "distractor",
+          "answer": "Don't know [1]",
+          "claims": 1,
+          "faithfulness": 0.0,
+          "mean_support": 0.4835,
+          "citation_coverage": 1.0,
+          "citation_validity": 1.0,
+          "cited_support": 0.3683,
+          "supports": [
+            {
+              "claim": "Don't know",
+              "support": 0.4835,
+              "supported": false,
+              "best_chunk": 2,
+              "citations": [
+                1
+              ],
+              "invalid_citations": [],
+              "cited_support": 0.3683
+            }
+          ]
+        },
+        {
+          "question": "How is access control enforced when chunks are searched?",
+          "condition": "closed_book",
+          "answer": "Access control enforcement when searching chunks depends on how the chunks are stored and accessed, but here's a breakdown of common approaches:\n\n**1.  Metadata-Based Access Control:**\n\n* **Chunk Metadata:**  Each chunk can have metadata attached to it that specifies its access permissions (e.g., read-only, write-access). This metadata is often stored alongside the chunk itself.\n* **Authorization Server:** A central authorization server checks the user's credentials against the specified permissions for the requested chunk. If the user has permission, the chunk can be accessed; otherwise, access is denied.\n\n**2.  Database-Based Access Control:**\n\n* **Access Table:** A database table stores information about users and their allowed access to specific chunks or data sets. \n* **Querying:** When a search query is executed, the database queries the access table to determine which chunks are accessible to the user based on their permissions.\n\n**3.  File System-Based Access Control:**\n\n* **Permissions:** The file system itself can enforce access control by using file permissions (e.g., read, write, execute) for each chunk.\n* **User Identification:** When a user tries to access a chunk, the operating system checks their identity and associated permissions against the file's permissions. \n\n**4.  Combination of Approaches:**\n\n* **Hybrid Systems:** Often, multiple approaches are combined to provide comprehensive access control. For example, metadata might be used for basic access control, while database-based or file system-based mechanisms enforce more complex restrictions.\n\n\n**Key Considerations:**\n\n* **Granularity:** How granular is the access control? Do you need to restrict access to specific files within a chunk, or just overall access to the entire chunk?\n* **Security Level:** What level of security do you require?  Do you need to prevent unauthorized access entirely, or just limit certain actions (e.g., reading, writing)? \n* **Performance:** How quickly does the system need to respond to requests for access control?\n\n\nLet me know if you'd like a more detailed explanation of any specific approach!",
+          "claims": 20,
+          "faithfulness": 0.2,
+          "mean_support": 0.681,
+          "citation_coverage": 0.0,
+          "citation_validity": null,
+          "cited_support": null,
+          "supports": [
+            {
+              "claim": "Access control enforcement when searching chunks depends on how the chunks are stored and accessed, but here's a breakdown of common approaches: **1.",
+              "support": 0.744,
+              "supported": false,
+              "best_chunk": 1,
+              "citations": [],
+              "invalid_citations": [],
+              "cited_support": null
+            },
+            {
+              "claim": "Metadata-Based Access Control:** * **Chunk Metadata:** Each chunk can have metadata attached to it that specifies its access permissions (e.g., read-only, write-access).",
+              "support": 0.7386,
+              "supported": false,
+              "best_chunk": 1,
+              "citations": [],
+              "invalid_citations": [],
+              "cited_support": null
+            },
+            {
+              "claim": "This metadata is often stored alongside the chunk itself.",
+              "support": 0.7355,
+              "supported": false,
+              "best_chunk": 1,
+              "citations": [],
+              "invalid_citations": [],
+              "cited_support": null
+            },
+            {
+              "claim": "* **Authorization Server:** A central authorization server checks the user's credentials against the specified permissions for the requested chunk.",
+              "support": 0.6499,
+              "supported": false,
+              "best_chunk": 1,
+              "citations": [],
+              "invalid_citations": [],
+              "cited_support": null
+            },
+            {
+              "claim": "If the user has permission, the chunk can be accessed; otherwise, access is denied.",
+              "support": 0.7806,
+              "supported": true,
+              "best_chunk": 1,
+              "citations": [],
+              "invalid_citations": [],
+              "cited_support": null
+            },
+            {
+              "claim": "**2.",
+              "support": 0.8462,
+              "supported": true,
+              "best_chunk": 2,
+              "citations": [],
+              "invalid_citations": [],
+              "cited_support": null
+            },
+            {
+              "claim": "Database-Based Access Control:** * **Access Table:** A database table stores information about users and their allowed access to specific chunks or data sets.",
+              "support": 0.7559,
+              "supported": true,
+              "best_chunk": 1,
+              "citations": [],
+              "invalid_citations": [],
+              "cited_support": null
+            },
+            {
+              "claim": "* **Querying:** When a search query is executed, the database queries the access table to determine which chunks are accessible to the user based on their permissions.",
+              "support": 0.7687,
+              "supported": true,
+              "best_chunk": 1,
+              "citations": [],
+              "invalid_citations": [],
+              "cited_support": null
+            },
+            {
+              "claim": "**3.",
+              "support": 0.6639,
+              "supported": false,
+              "best_chunk": 2,
+              "citations": [],
+              "invalid_citations": [],
+              "cited_support": null
+            },
+            {
+              "claim": "File System-Based Access Control:** * **Permissions:** The file system itself can enforce access control by using file permissions (e.g., read, write, execute) for each chunk.",
+              "support": 0.7352,
+              "supported": false,
+              "best_chunk": 1,
+              "citations": [],
+              "invalid_citations": [],
+              "cited_support": null
+            },
+            {
+              "claim": "* **User Identification:** When a user tries to access a chunk, the operating system checks their identity and associated permissions against the file's permissions.",
+              "support": 0.7029,
+              "supported": false,
+              "best_chunk": 1,
+              "citations": [],
+              "invalid_citations": [],
+              "cited_support": null
+            },
+            {
+              "claim": "**4.",
+              "support": 0.5978,
+              "supported": false,
+              "best_chunk": 2,
+              "citations": [],
+              "invalid_citations": [],
+              "cited_support": null
+            },
+            {
+              "claim": "Combination of Approaches:** * **Hybrid Systems:** Often, multiple approaches are combined to provide comprehensive access control.",
+              "support": 0.61,
+              "supported": false,
+              "best_chunk": 1,
+              "citations": [],
+              "invalid_citations": [],
+              "cited_support": null
+            },
+            {
+              "claim": "For example, metadata might be used for basic access control, while database-based or file system-based mechanisms enforce more complex restrictions.",
+              "support": 0.6577,
+              "supported": false,
+              "best_chunk": 1,
+              "citations": [],
+              "invalid_citations": [],
+              "cited_support": null
+            },
+            {
+              "claim": "**Key Considerations:** * **Granularity:** How granular is the access control?",
+              "support": 0.6403,
+              "supported": false,
+              "best_chunk": 1,
+              "citations": [],
+              "invalid_citations": [],
+              "cited_support": null
+            },
+            {
+              "claim": "Do you need to restrict access to specific files within a chunk, or just overall access to the entire chunk?",
+              "support": 0.7181,
+              "supported": false,
+              "best_chunk": 1,
+              "citations": [],
+              "invalid_citations": [],
+              "cited_support": null
+            },
+            {
+              "claim": "* **Security Level:** What level of security do you require?",
+              "support": 0.572,
+              "supported": false,
+              "best_chunk": 2,
+              "citations": [],
+              "invalid_citations": [],
+              "cited_support": null
+            },
+            {
+              "claim": "Do you need to prevent unauthorized access entirely, or just limit certain actions (e.g., reading, writing)?",
+              "support": 0.645,
+              "supported": false,
+              "best_chunk": 1,
+              "citations": [],
+              "invalid_citations": [],
+              "cited_support": null
+            },
+            {
+              "claim": "* **Performance:** How quickly does the system need to respond to requests for access control?",
+              "support": 0.6194,
+              "supported": false,
+              "best_chunk": 1,
+              "citations": [],
+              "invalid_citations": [],
+              "cited_support": null
+            },
+            {
+              "claim": "Let me know if you'd like a more detailed explanation of any specific approach!",
+              "support": 0.4383,
+              "supported": false,
+              "best_chunk": 1,
+              "citations": [],
+              "invalid_citations": [],
+              "cited_support": null
+            }
+          ]
+        },
+        {
+          "question": "What is stored alongside each chunk in the vector store?",
+          "condition": "grounded",
+          "answer": "Along with each chunk, the vector store stores its identifier of the document it came from, the strategy that produced it, and its position in that strategy's sequence. [1]",
+          "claims": 1,
+          "faithfulness": 1.0,
+          "mean_support": 0.885,
+          "citation_coverage": 0.0,
+          "citation_validity": null,
+          "cited_support": null,
+          "supports": [
+            {
+              "claim": "Along with each chunk, the vector store stores its identifier of the document it came from, the strategy that produced it, and its position in that strategy's sequence.",
+              "support": 0.885,
+              "supported": true,
+              "best_chunk": 1,
+              "citations": [],
+              "invalid_citations": [],
+              "cited_support": null
+            }
+          ]
+        },
+        {
+          "question": "What is stored alongside each chunk in the vector store?",
+          "condition": "distractor",
+          "answer": "I don't know. [1]",
+          "claims": 1,
+          "faithfulness": 0.0,
+          "mean_support": 0.5069,
+          "citation_coverage": 0.0,
+          "citation_validity": null,
+          "cited_support": null,
+          "supports": [
+            {
+              "claim": "I don't know.",
+              "support": 0.5069,
+              "supported": false,
+              "best_chunk": 2,
+              "citations": [],
+              "invalid_citations": [],
+              "cited_support": null
+            }
+          ]
+        },
+        {
+          "question": "What is stored alongside each chunk in the vector store?",
+          "condition": "closed_book",
+          "answer": "The answer is **metadata**. \n\nHere's why:\n\n* **Vector Stores** are designed to efficiently store and retrieve vectors (mathematical representations of data points). \n* To make this retrieval process fast and accurate, vector stores associate each vector with relevant metadata. This metadata can include things like:\n    * **Context:**  Information about the source or origin of the vector.\n    * **Labels:** Tags that categorize the vector for easier searching.\n    * **Dimensions:** The number of features in the vector.\n    * **Similarity Scores:**  A measure of how similar a vector is to other vectors stored in the store.\n\n**In short, metadata acts as a bridge between the raw vector data and the information needed to effectively search and retrieve it.** \n\n\nLet me know if you'd like more details on vector stores or their use!",
+          "claims": 8,
+          "faithfulness": 0.0,
+          "mean_support": 0.6389,
+          "citation_coverage": 0.0,
+          "citation_validity": null,
+          "cited_support": null,
+          "supports": [
+            {
+              "claim": "The answer is **metadata**.",
+              "support": 0.5829,
+              "supported": false,
+              "best_chunk": 1,
+              "citations": [],
+              "invalid_citations": [],
+              "cited_support": null
+            },
+            {
+              "claim": "Here's why: * **Vector Stores** are designed to efficiently store and retrieve vectors (mathematical representations of data points).",
+              "support": 0.7382,
+              "supported": false,
+              "best_chunk": 2,
+              "citations": [],
+              "invalid_citations": [],
+              "cited_support": null
+            },
+            {
+              "claim": "* To make this retrieval process fast and accurate, vector stores associate each vector with relevant metadata.",
+              "support": 0.6968,
+              "supported": false,
+              "best_chunk": 1,
+              "citations": [],
+              "invalid_citations": [],
+              "cited_support": null
+            },
+            {
+              "claim": "This metadata can include things like: * **Context:** Information about the source or origin of the vector.",
+              "support": 0.6481,
+              "supported": false,
+              "best_chunk": 1,
+              "citations": [],
+              "invalid_citations": [],
+              "cited_support": null
+            },
+            {
+              "claim": "* **Labels:** Tags that categorize the vector for easier searching.",
+              "support": 0.619,
+              "supported": false,
+              "best_chunk": 2,
+              "citations": [],
+              "invalid_citations": [],
+              "cited_support": null
+            },
+            {
+              "claim": "* **Dimensions:** The number of features in the vector.",
+              "support": 0.5765,
+              "supported": false,
+              "best_chunk": 1,
+              "citations": [],
+              "invalid_citations": [],
+              "cited_support": null
+            },
+            {
+              "claim": "* **Similarity Scores:** A measure of how similar a vector is to other vectors stored in the store.",
+              "support": 0.5744,
+              "supported": false,
+              "best_chunk": 1,
+              "citations": [],
+              "invalid_citations": [],
+              "cited_support": null
+            },
+            {
+              "claim": "**In short, metadata acts as a bridge between the raw vector data and the information needed to effectively search and retrieve it.** Let me know if you'd like more details on vector stores or their use!",
+              "support": 0.6749,
+              "supported": false,
+              "best_chunk": 2,
+              "citations": [],
+              "invalid_citations": [],
+              "cited_support": null
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

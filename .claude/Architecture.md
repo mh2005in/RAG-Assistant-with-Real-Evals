@@ -51,7 +51,7 @@ its neighbours — which is what makes strategies comparable in evals.
 | Embedding | `Embedder` | Ollama `nomic-embed-text` (768-dim) | `services/embedding/` |
 | Storage | `PostgresStorage` | Postgres + pgvector | `services/storage/` |
 | Retrieval | — (a service class) | pgvector cosine + role filter | `services/retrieval.py` |
-| Generation | `LLMClient` | Ollama (`gemma2:2b` by default) | `services/generation/` |
+| Generation | `LLMClient` | Ollama (`gemma2:2b` by default), plus the answer-faithfulness metric | `services/generation/` |
 | Evaluation | — (a service class) | Labelled retrieval eval over Q&A | `services/evaluation.py` |
 
 **Service layout follows one rule from [CLAUDE.md](../CLAUDE.md): one service class
@@ -142,6 +142,14 @@ deterministic, repeatable scorer. The LLM-judge alternative is scoped as an
 prompt grounding the model in those chunks — the *augment* step — and returns the
 generated answer with its sources. `/answer` is the only endpoint that calls the
 generation model.
+
+Whether the answer is actually *grounded* in those sources is not taken on trust.
+`services/generation/faithfulness.py` scores an answer's sentence-level claims
+against its context sentences, and `evals/answer_faithfulness_eval.py` runs it
+offline over three conditions — the real context, a distractor context, and no
+context — so the measure is shown to separate grounded answers from ungrounded
+ones rather than just producing a number (`REQ-EVL-06`). The metric is a library,
+not a request-path step: `/answer` never scores itself.
 
 ## 4. Data model
 
@@ -235,6 +243,8 @@ Short entries, kept because the reasoning matters more than the choice.
 | D6 | Single `access_role` column | Simplest thing that enforces the requirement | Needs a join table for multi-role documents |
 | D7 | Frontend proxies the API (single origin) | No CORS configuration to get wrong, in any environment | The frontend container must know the API paths |
 | D8 | pgvector over a dedicated vector database | One datastore, one backup story, SQL joins to document metadata | Fixed-dimension column; HNSW tuning is manual |
+| D9 | Measure answer faithfulness with embedding similarity, not an LLM judge | Same reasoning as D3, applied to generation: deterministic, free, offline, and unblocked by the judge-model decision `REQ-EVL-05` is still waiting on | Similarity is not entailment — a claim that contradicts the context while resembling it scores as supported, and an honest "I don't know" scores as unfaithful |
+| D10 | Score claims against context **sentences**, not whole chunks | A chunk embedding is dominated by its overall topic, so chunk-level matching passed invented on-topic claims; the first version of the metric could not separate grounded from ungrounded answers at all | One embedding per context sentence instead of per chunk, and a sentence→chunk map to keep citations scorable |
 
 ## 8. Extension points
 
@@ -247,7 +257,13 @@ Where new work attaches, and what it must not disturb:
   ahead of chunking and must produce the same per-page structure.
   (`REQ-EXT-03`–`05`)
 - **A different embedding model** — swap by environment if it is 768-dim;
-  otherwise the schema needs the change described in `REQ-EMB-02`.
+  otherwise the schema needs the change described in `REQ-EMB-02`. Note the
+  faithfulness support threshold is calibrated per embedding model: re-run the
+  eval and read its `threshold_sweep` before trusting the old cut.
+- **A different generation model or prompt** — the faithfulness eval generates
+  through the shipped `Answering.build_prompt`, so re-running it measures the
+  change directly. The client is seeded, but generation is not bit-reproducible:
+  compare the *ordering* across the eval's conditions, not single digits.
 - **Richer eval metrics** — rank-aware metrics attach to the same labelled Q&A
   set `/evaluate` already takes (`REQ-EVL-04`); the LLM-judge eval stays *offline*
   in `backend/evals/`, never in the request path (`REQ-EVL-05`).
