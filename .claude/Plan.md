@@ -16,7 +16,8 @@ single requirement is taken from open to merged.
 Three constraints set the order, and they matter more than any individual feature:
 
 1. **Measurement before breadth.** The project's premise is that every stage is
-   measured. Right now only chunking has real evals (`REQ-EVL-02` is `Partial`).
+   measured. Chunking and generation now have real evals; extraction, embedding,
+   storage and retrieval still do not (`REQ-EVL-02` is `Partial`).
    Adding more ingestion formats or strategies before the measurement layer exists
    means adding things we can't tell are working — which is the exact failure mode
    this project was built to avoid. Phase 4 comes first for that reason.
@@ -99,21 +100,22 @@ the backend gates run somewhere other than one laptop.
 | --- | --- | --- |
 | 4.1 | `REQ-QUA-06` | ✅ **Shipped 2026-08-23** (PR #29). Backend CI workflow: `ruff format --check`, `ruff check`, `mypy` and the fast tests on `backend/**`. |
 | 4.2 | `REQ-EVL-04` | ✅ **Shipped.** Rank-aware metrics (recall@k, MRR, nDCG) reported by `/evaluate` alongside the existing ones, with a comparative eval over both sample documents at k=3 and k=5. Ranking behaviour untouched — `answer_similarity` still picks the winner. |
-| 4.3 | `REQ-EVL-06` | Answer-faithfulness eval for generation — offline, in `backend/evals/`. The first eval that covers the generation stage. |
+| 4.3 | `REQ-EVL-06` | ✅ **Shipped.** Answer-faithfulness eval for generation: claims vs context sentences, embedding-based, three conditions (grounded / distractor / closed-book). The first eval covering the generation stage; also closed `REQ-GEN-01`'s grounding gap. |
 | 4.4 | `REQ-EVL-05` | RAGAS LLM-judge eval. **Blocked on a decision** (local judge vs external judge API) — see the README proposal. Resolve the decision before any code. |
-| 4.5 | `REQ-EVL-02` | Embedding eval to finish the stage coverage — retrieval is now covered by 4.2. Flips this requirement from `Partial` to `Done`. |
+| 4.5 | `REQ-EVL-02` | Extraction, embedding and storage evals to finish the stage coverage — retrieval is now covered by 4.2 and generation by 4.3. Flips this requirement from `Partial` to `Done`. |
 
 **Dependencies:** 4.2 and 4.3 are independent of each other. 4.4 is gated on a
 human decision, not on code. 4.5 should land last so it can reuse the harness
-4.2/4.3 establish — 4.2 has now set that harness down: an eval can drive the real
-`Evaluation` service against an in-memory stand-in for pgvector, so it needs no
-database.
+4.2/4.3 establish, and both have now set it down. From 4.2: an eval can drive the
+real `Evaluation` service against an in-memory stand-in for pgvector, so it needs
+no database. From 4.3: seeded generation and control arms — a metric is only
+trusted once a control shows it separates.
 
 **Exit criteria:**
 - A CI run on a backend PR shows tests, lint and types green.
 - Every pipeline stage has at least one reproducible eval with a committed result
   artifact.
-- `REQ-EVL-02` is `Done`; `REQ-EVL-04` is `Done` ✅ and `REQ-EVL-06` is `Done`.
+- `REQ-EVL-02` is `Done`; `REQ-EVL-04` ✅ and `REQ-EVL-06` ✅ are both `Done`.
 - The RAGAS decision is recorded — either implemented or explicitly deferred with
   the reasoning written down.
 
@@ -175,7 +177,9 @@ comparison numbers committed.
 
 | Risk | Effect | Mitigation |
 | --- | --- | --- |
-| Local judge quality (`REQ-EVL-05`) | A small local model is a noisy grader; metrics could mislead more than they inform | Treat LLM-judged numbers as indicative, pin model and temperature, keep the deterministic embedding score as the ranking metric |
+| Local judge quality (`REQ-EVL-05`) | A small local model is a noisy grader; metrics could mislead more than they inform | Treat LLM-judged numbers as indicative, pin model and temperature, keep the deterministic embedding score as the ranking metric. **Reduced** — `REQ-EVL-06` ships a deterministic faithfulness measure, so a judge model is now an addition rather than the only route to grounding numbers |
+| Faithfulness threshold is fitted (`REQ-EVL-06`) | `0.75` was calibrated on 8 questions over 2 documents with one embedding model; a different corpus or model could move it, quietly changing what "supported" means | The eval sweeps the threshold on every run and records it in the artifact, so drift is visible rather than silent; `mean_support` is threshold-free and is the number relied on |
+| Generation is not bit-reproducible (`REQ-EVL-06`) | A seeded run still varies; a reader could treat one run's digits as fixed, or read normal noise as a regression | The eval's conclusion is the ordering across its three conditions, which has held on every run; the docstring, README and requirement evidence all say to read a single run as one sample |
 | Eval runtime | Semantic chunking and any LLM-judged eval are slow; a slow eval stops being run | Keep evals offline and out of the request path; keep the fast test suite free of both |
 | Schema coupling to 768 dims | Blocks embedding-model experiments (`REQ-EMB-02`) | Address in Phase 6 alongside the other migration |
 | Backend gates are local-only (`REQ-QUA-06`) | A PR from another environment bypasses tests, lint and types entirely | **Closed** — the `backend-ci` workflow re-runs format, lint, types and the fast tests on every PR touching `backend/**` |

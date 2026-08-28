@@ -80,7 +80,7 @@ tests, not by an eval. See `REQ-EVL-02`.
 
 | ID | Requirement | Status | Acceptance | Evidence |
 | --- | --- | --- | --- | --- |
-| REQ-GEN-01 | `POST /answer` retrieves context, augments the prompt with it, and returns a grounded answer plus its source chunks. | Partial | The response carries the answer and the sources it was grounded in; citations refer to those sources. | [answering.py](../backend/services/answering.py), [test_answering.py](../backend/tests/test_answering.py) — **Gap:** the response shape is tested, but **grounded** is a quality claim and nothing measures it. `REQ-EVL-06` (answer faithfulness) is the eval that would. |
+| REQ-GEN-01 | `POST /answer` retrieves context, augments the prompt with it, and returns a grounded answer plus its source chunks. | Done | The response carries the answer and the sources it was grounded in; citations refer to those sources, and the grounding is measured rather than asserted. | [answering.py](../backend/services/answering.py), [test_answering.py](../backend/tests/test_answering.py) for the response shape; [answer_faithfulness.json](../backend/evals/results/answer_faithfulness.json) (`REQ-EVL-06`) for the quality claim — answers generated through the shipped prompt score 0.92/1.00 faithfulness across the two eval datasets, against 0.58/0.00 on a distractor context built from the same documents. |
 | REQ-GEN-02 | Generation runs through one `LLMClient` interface backed by local Ollama, model set by environment (default `gemma2:2b`). | Done | No external API key; a larger model can be swapped in by environment alone; tests override the client with a fake. | [ollama_client.py](../backend/services/generation/ollama_client.py), [test_ollama_client.py](../backend/tests/test_ollama_client.py) |
 
 ## EVL — Evaluation
@@ -88,11 +88,11 @@ tests, not by an eval. See `REQ-EVL-02`.
 | ID | Requirement | Status | Acceptance | Evidence |
 | --- | --- | --- | --- | --- |
 | REQ-EVL-01 | `POST /evaluate` scores a stored document's strategies against caller-supplied Q&A pairs, ranks them by answer similarity, reports hit rate, keeps the winner's chunks and deletes the rest. | Done | The response ranks every stored strategy best-first with exactly one marked selected; afterwards the document holds only that strategy's chunks. A role mismatch is a 404. | [evaluation.py](../backend/services/evaluation.py), [test_evaluation.py](../backend/tests/test_evaluation.py) |
-| REQ-EVL-02 | Every pipeline stage is measured by a **reproducible, checked-in** eval whose results are regenerable artifacts, not screenshots. | Partial | Chunking is covered (fixed-size sweep plus the three-strategy comparison) and retrieval is covered (rank-aware metrics per strategy, `REQ-EVL-04`); all results committed as JSON. Extraction, embedding, storage and generation have no standalone eval yet. | [evals/](../backend/evals/), [results/](../backend/evals/results/) |
+| REQ-EVL-02 | Every pipeline stage is measured by a **reproducible, checked-in** eval whose results are regenerable artifacts, not screenshots. | Partial | Chunking (fixed-size sweep plus the three-strategy comparison), retrieval (rank-aware metrics per strategy, `REQ-EVL-04`) and generation (answer faithfulness, `REQ-EVL-06`) are covered; all results committed as JSON. Extraction, embedding and storage have no standalone eval yet. | [evals/](../backend/evals/), [results/](../backend/evals/results/) |
 | REQ-EVL-03 | Chunking strategies are comparable **without labels**, via a cohesion/separation score. | Done | The comparison eval reports one score per strategy per dataset, over a flat and a structured document. | [coherence.py](../backend/services/chunking/coherence.py), [test_coherence.py](../backend/tests/test_coherence.py) |
 | REQ-EVL-04 | Rank-aware retrieval metrics (recall@k, MRR, nDCG) over the same labelled Q&A set `/evaluate` already takes. | Done | Reported alongside answer similarity and hit rate and recorded as a regenerable artifact; ranking behaviour unchanged unless deliberately switched. | [rank_metrics.py](../backend/services/rank_metrics.py), [evaluation.py](../backend/services/evaluation.py), [test_rank_metrics.py](../backend/tests/test_rank_metrics.py), [test_evaluation.py](../backend/tests/test_evaluation.py), [retrieval_ranking_eval.py](../backend/evals/retrieval_ranking_eval.py) → [retrieval_ranking.json](../backend/evals/results/retrieval_ranking.json). Ranking still follows `answer_similarity` alone, held by a test that makes the rank metrics disagree with the winner. |
 | REQ-EVL-05 | A fully-local RAGAS LLM-judge eval (faithfulness, response relevancy, context precision and recall), run **offline** and never in the request path. | Proposed | Blocked on the decision recorded in the README proposal: a local judge (open-source, weaker) against an external judge API (stronger, per-call cost). | [README proposal](../README.md#proposal-llm-judge-evaluation-with-ragas) |
-| REQ-EVL-06 | Answer-faithfulness measurement for the generation stage — is the answer grounded in its cited sources? | Planned | An offline eval scores generated answers against their retrieved context; REQ-GEN-01 stays `Done` only while this holds. | — |
+| REQ-EVL-06 | Answer-faithfulness measurement for the generation stage — is the answer grounded in its cited sources? | Done | An offline eval scores generated answers against their retrieved context, and separates them from an ungrounded control on the same data; REQ-GEN-01 stays `Done` only while this holds. | [faithfulness.py](../backend/services/generation/faithfulness.py), [answer_faithfulness_eval.py](../backend/evals/answer_faithfulness_eval.py), [answer_faithfulness.json](../backend/evals/results/answer_faithfulness.json), [test_faithfulness.py](../backend/tests/test_faithfulness.py) — grounded answers score 0.92/1.00 faithfulness (mean support 0.92/0.85) against 0.58/0.00 for a distractor context and 0.42/0.19 closed-book. Generation is seeded but not bit-reproducible, so the **ordering** across the three conditions is the acceptance signal, not the digits; it has held on every run. |
 
 ## API — Service surface
 
@@ -135,7 +135,7 @@ tests, not by an eval. See `REQ-EVL-02`.
 | ID | Requirement | Status | Acceptance | Evidence |
 | --- | --- | --- | --- | --- |
 | REQ-QUA-01 | Formatting, linting and type checking are automatic rather than remembered: format and lint-fix after every edit, type check at the end of every turn. | Done | Configured as `PostToolUse` and `Stop` hooks. | [settings.json](settings.json) |
-| REQ-QUA-02 | Unit tests are fast and offline (external services mocked); anything needing Postgres/pgvector or the network is marked `integration` so the default run stays fast. | Done | 164 fast and 6 integration tests collected; the fast set runs with no database and no network. | [tests/](../backend/tests/), [pyproject.toml](../backend/pyproject.toml) |
+| REQ-QUA-02 | Unit tests are fast and offline (external services mocked); anything needing Postgres/pgvector or the network is marked `integration` so the default run stays fast. | Done | 175 fast and 6 integration tests collected; the fast set runs with no database and no network. | [tests/](../backend/tests/), [pyproject.toml](../backend/pyproject.toml) |
 | REQ-QUA-03 | The frontend has both a fast offline E2E suite (API stubbed in-browser) and a stack suite proving what only the deployment can — the SPA deep-link fallback and the proxy hop. | Done | 9 mocked specs run with no backend; 3 stack specs run against the live stack. | [e2e/](../frontend/e2e/), [playwright.config.ts](../frontend/playwright.config.ts) |
 | REQ-QUA-04 | A commit can't introduce a wrong author, a leaked secret, or a failing fast test. | Done | The pre-commit hook checks the author, runs gitleaks on the staged diff, then runs the fast tests. | [.githooks/pre-commit](../.githooks/pre-commit) |
 | REQ-QUA-05 | The mocked frontend E2E suite runs in CI on every PR touching the frontend. | Done | The `frontend-e2e` workflow runs it and uploads the Playwright report as an artifact. | [frontend-e2e.yml](../.github/workflows/frontend-e2e.yml) |
@@ -161,15 +161,15 @@ tests, not by an eval. See `REQ-EVL-02`.
 | EMB | 1 | 0 | 1 | 0 | 2 |
 | STO | 3 | 0 | 0 | 0 | 3 |
 | RET | 2 | 0 | 0 | 0 | 2 |
-| GEN | 1 | 1 | 0 | 0 | 2 |
-| EVL | 2 | 1 | 2 | 1 | 6 |
+| GEN | 2 | 0 | 0 | 0 | 2 |
+| EVL | 4 | 1 | 0 | 1 | 6 |
 | API | 4 | 0 | 0 | 0 | 4 |
 | SEC | 2 | 0 | 2 | 0 | 4 |
 | UI | 4 | 0 | 0 | 0 | 4 |
 | OPS | 4 | 0 | 0 | 0 | 4 |
 | QUA | 7 | 0 | 0 | 0 | 7 |
 | DOC | 3 | 0 | 0 | 0 | 3 |
-| **Total** | **40** | **2** | **10** | **1** | **53** |
+| **Total** | **43** | **1** | **8** | **1** | **53** |
 
 Sequencing for everything not yet `Done` is in [Plan.md](Plan.md); live status is
 in [Status-Dashboard.md](Status-Dashboard.md).
