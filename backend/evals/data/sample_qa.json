@@ -1,0 +1,67 @@
+{
+  "_comment": "Labelled question/expected-answer pairs for the retrieval ranking eval, keyed by the dataset they were written against. Synthetic: both source documents are written for this repository, so nothing here is real user content. Answers are phrased in the document's own vocabulary, since scoring is embedding similarity against the retrieved chunks.",
+  "sample.txt": [
+    {
+      "question": "What does retrieval-augmented generation use to ground a language model?",
+      "answer": "An external knowledge base, so answers cite real source material instead of relying on parametric memory."
+    },
+    {
+      "question": "What does a typical RAG pipeline do with a document?",
+      "answer": "It ingests documents, splits them into retrievable chunks, embeds each chunk into a vector, and stores those vectors for similarity search."
+    },
+    {
+      "question": "What goes wrong when chunks are too large?",
+      "answer": "Chunks that are too large dilute the signal and waste the context window."
+    },
+    {
+      "question": "What goes wrong when chunks are too small?",
+      "answer": "Chunks that are too small fracture ideas across boundaries and lose the surrounding meaning a reader needs."
+    },
+    {
+      "question": "How does fixed-size chunking split a document?",
+      "answer": "It ignores sentence, paragraph and section boundaries and slices the text stream into windows of a set length."
+    },
+    {
+      "question": "What is the weakness of fixed-size chunking?",
+      "answer": "It cuts through the middle of sentences and ideas, stranding an important clause at the edge of a chunk."
+    },
+    {
+      "question": "Why is fixed-size chunking used as a baseline?",
+      "answer": "Because it is simple and predictable, it makes an honest baseline that later strategies have real numbers to beat."
+    }
+  ],
+  "structured_sample.txt": [
+    {
+      "question": "What does the extraction stage do to a binary document?",
+      "answer": "Extraction turns a binary document into plain text, keeping each page separately so every chunk can say which page it came from."
+    },
+    {
+      "question": "How does page exclusion affect page numbering?",
+      "answer": "Exclusion blanks a page rather than dropping it, so the pages that follow retain their original numbers."
+    },
+    {
+      "question": "What happens to a file that is not a readable document?",
+      "answer": "It is rejected outright instead of being silently stored as empty text, which keeps unusable content out of the vector store."
+    },
+    {
+      "question": "How does the structure-aware strategy choose where to split?",
+      "answer": "It looks for the markers the document already carries: headings, numbered sections and labelled clauses."
+    },
+    {
+      "question": "How does the semantic strategy decide where to break?",
+      "answer": "It embeds each sentence and breaks where consecutive sentences drift apart in meaning."
+    },
+    {
+      "question": "What is stored alongside each chunk when it is written?",
+      "answer": "The identifier of the document it came from, the strategy that produced it, and its position in that strategy's sequence."
+    },
+    {
+      "question": "How is access control enforced on a search?",
+      "answer": "Each document carries an access role and every search is filtered by it, so access is enforced in the query rather than after the results come back."
+    },
+    {
+      "question": "What does recall mean in this handbook?",
+      "answer": "Recall is the share of the passages that should have been retrieved for a question that actually were."
+    }
+  ]
+}

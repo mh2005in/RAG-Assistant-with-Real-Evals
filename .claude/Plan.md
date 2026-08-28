@@ -98,20 +98,22 @@ the backend gates run somewhere other than one laptop.
 | # | Requirement | Notes |
 | --- | --- | --- |
 | 4.1 | `REQ-QUA-06` | ✅ **Shipped 2026-08-23** (PR #29). Backend CI workflow: `ruff format --check`, `ruff check`, `mypy` and the fast tests on `backend/**`. |
-| 4.2 | `REQ-EVL-04` | Rank-aware metrics (recall@k, MRR, nDCG) over the Q&A set `/evaluate` already takes. Report alongside the current metrics; **don't change the ranking behaviour** in the same change. |
+| 4.2 | `REQ-EVL-04` | ✅ **Shipped.** Rank-aware metrics (recall@k, MRR, nDCG) reported by `/evaluate` alongside the existing ones, with a comparative eval over both sample documents at k=3 and k=5. Ranking behaviour untouched — `answer_similarity` still picks the winner. |
 | 4.3 | `REQ-EVL-06` | Answer-faithfulness eval for generation — offline, in `backend/evals/`. The first eval that covers the generation stage. |
 | 4.4 | `REQ-EVL-05` | RAGAS LLM-judge eval. **Blocked on a decision** (local judge vs external judge API) — see the README proposal. Resolve the decision before any code. |
-| 4.5 | `REQ-EVL-02` | Retrieval and embedding evals to finish the stage coverage. Flips this requirement from `Partial` to `Done`. |
+| 4.5 | `REQ-EVL-02` | Embedding eval to finish the stage coverage — retrieval is now covered by 4.2. Flips this requirement from `Partial` to `Done`. |
 
 **Dependencies:** 4.2 and 4.3 are independent of each other. 4.4 is gated on a
 human decision, not on code. 4.5 should land last so it can reuse the harness
-4.2/4.3 establish.
+4.2/4.3 establish — 4.2 has now set that harness down: an eval can drive the real
+`Evaluation` service against an in-memory stand-in for pgvector, so it needs no
+database.
 
 **Exit criteria:**
 - A CI run on a backend PR shows tests, lint and types green.
 - Every pipeline stage has at least one reproducible eval with a committed result
   artifact.
-- `REQ-EVL-02` is `Done`; `REQ-EVL-04` and `REQ-EVL-06` are `Done`.
+- `REQ-EVL-02` is `Done`; `REQ-EVL-04` is `Done` ✅ and `REQ-EVL-06` is `Done`.
 - The RAGAS decision is recorded — either implemented or explicitly deferred with
   the reasoning written down.
 

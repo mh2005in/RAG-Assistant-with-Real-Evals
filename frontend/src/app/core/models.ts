@@ -63,6 +63,12 @@ export interface StrategyEvaluation {
   questions: number;
   answer_similarity: number;
   hit_rate: number;
+  // Rank-aware metrics. recall_at_k and ndcg_at_k are null when no chunk in the
+  // document matched any expected answer, which leaves them undefined rather
+  // than zero -- the retriever cannot miss what is not there.
+  recall_at_k: number | null;
+  mrr: number;
+  ndcg_at_k: number | null;
   selected: boolean;
 }
 
