@@ -49,6 +49,12 @@ See [Plan.md](Plan.md).
   ships. Both copies of the Definition of Done gained the matching line, and
   `Status-Dashboard.md` and `Change-Log.md` are now called out as derived state
   that is never hand-edited in that step.
+- **CI actions moved off the deprecated Node.js 20 runtime.** `actions/checkout`,
+  `actions/setup-node` and `actions/upload-artifact` were all on `v4`, which is
+  `runs.using: node20`; every run warned they were being forced onto Node 24. All
+  three are now `v7`. `upload-artifact@v5` is still node20 — node 24 only became
+  its default in v6 — so a single-major bump would have left this half-fixed.
+  `astral-sh/setup-uv@v10.0.1` was already node24 and is unchanged.
 - **The eval rule now gates quality claims, not every requirement in a pipeline
   stage.** As written, it said any `EXT`/`CHK`/`EMB`/`STO`/`RET`/`GEN` requirement
   needed a real eval to be `Done` — which would have demoted ten rows asserting
@@ -59,7 +65,7 @@ See [Plan.md](Plan.md).
   all 53 rows; `REQ-GEN-01` moves to `Partial` because *grounded* is a quality
   claim nothing currently measures (`REQ-EVL-06` is the eval that would close it).
 
-*PR #29, #30*
+*PR #29, #30, #31, #32, #33*
 
 ## 2026-08-21
 

@@ -6,6 +6,12 @@ fact against a caller-supplied labelled set (question/expected-answer pairs) and
 keeps the best. Each strategy is scored by how well retrieving against it surfaces
 the expected answers, so the winner is the one that actually retrieves best for
 this document — a labelled retrieval eval, not a structural heuristic.
+
+Two kinds of number are reported. ``answer_similarity`` and ``hit_rate`` ask how
+*close* the retrieved chunks came to the expected answer; ``recall_at_k``, ``mrr``
+and ``ndcg_at_k`` ask where in the ranking the useful chunks landed (see
+:mod:`services.rank_metrics`). Only ``answer_similarity`` ranks the strategies —
+the rank-aware metrics are reported for insight, not selection.
 """
 
 from pydantic import BaseModel, Field
@@ -40,6 +46,37 @@ class StrategyEvaluation(BaseModel):
         description=(
             "Fraction of questions whose expected answer was matched above the "
             "similarity threshold by at least one retrieved chunk."
+        ),
+    )
+    recall_at_k: float | None = Field(
+        default=None,
+        ge=0,
+        le=1,
+        description=(
+            "Mean over questions of the fraction of the strategy's relevant chunks "
+            "that reached the top-k retrieval; higher is better. Questions whose "
+            "expected answer matches no chunk at all are skipped, and null means "
+            "every question was skipped — the answers are not in this document."
+        ),
+    )
+    mrr: float = Field(
+        ...,
+        ge=0,
+        le=1,
+        description=(
+            "Mean reciprocal rank: 1/position of the first relevant chunk, averaged "
+            "over questions. 1.0 means the first hit was always ranked first."
+        ),
+    )
+    ndcg_at_k: float | None = Field(
+        default=None,
+        ge=0,
+        le=1,
+        description=(
+            "Mean normalised discounted cumulative gain over the top-k retrieval; "
+            "rewards ranking every relevant chunk early, not just the first. Skips "
+            "the same unanswerable questions as recall_at_k, and is null when every "
+            "question was skipped."
         ),
     )
     selected: bool = Field(

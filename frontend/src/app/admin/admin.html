@@ -242,6 +242,9 @@
             <th class="num">Questions</th>
             <th class="num">Answer similarity</th>
             <th class="num">Hit rate</th>
+            <th class="num">Recall@k</th>
+            <th class="num">MRR</th>
+            <th class="num">nDCG@k</th>
             <th>Kept</th>
           </tr>
         </thead>
@@ -252,6 +255,13 @@
               <td class="num">{{ e.questions }}</td>
               <td class="num">{{ e.answer_similarity | number: '1.3-3' }}</td>
               <td class="num">{{ e.hit_rate | percent: '1.0-0' }}</td>
+              <td class="num">
+                {{ e.recall_at_k === null ? '—' : (e.recall_at_k | percent: '1.0-0') }}
+              </td>
+              <td class="num">{{ e.mrr | number: '1.3-3' }}</td>
+              <td class="num">
+                {{ e.ndcg_at_k === null ? '—' : (e.ndcg_at_k | number: '1.3-3') }}
+              </td>
               <td>{{ e.selected ? '✓' : '' }}</td>
             </tr>
           }

@@ -102,6 +102,9 @@ test.describe('Admin tab (mocked backend)', () => {
               questions: 1,
               answer_similarity: 0.8,
               hit_rate: 1,
+              recall_at_k: 0.5,
+              mrr: 1,
+              ndcg_at_k: 0.75,
               selected: true,
             },
             {
@@ -109,6 +112,11 @@ test.describe('Admin tab (mocked backend)', () => {
               questions: 1,
               answer_similarity: 0.6,
               hit_rate: 0,
+              // Nothing in the document matched the expected answer, so the
+              // rank-aware metrics are undefined and render as a dash.
+              recall_at_k: null,
+              mrr: 0,
+              ndcg_at_k: null,
               selected: false,
             },
           ],
@@ -147,5 +155,17 @@ test.describe('Admin tab (mocked backend)', () => {
     const winner = page.locator('tr.selected');
     await expect(winner).toContainText('semantic');
     await expect(winner).toContainText('✓');
+    // Rank-aware metrics render alongside the similarity ones.
+    await expect(winner).toContainText('50%'); // recall@k
+    await expect(winner).toContainText('1.000'); // MRR
+    await expect(winner).toContainText('0.750'); // nDCG@k
+    // The losing strategy has no relevant chunk at all, so its undefined
+    // rank-aware metrics show as a dash rather than a misleading zero. Scoped to
+    // the evaluation table -- the process result above it also lists 'fixed'.
+    const evalTable = page
+      .locator('table.grid')
+      .filter({ has: page.locator('tr.selected') });
+    const loser = evalTable.locator('tbody tr').filter({ hasText: 'fixed' });
+    await expect(loser).toContainText('—');
   });
 });

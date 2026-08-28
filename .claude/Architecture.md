@@ -205,7 +205,7 @@ returns. Two dependencies are injected per request:
   thread-safe.
 - `get_llm()` — the Ollama client built from environment.
 
-Both exist so tests can override them with fakes, which is why 137 of the 143
+Both exist so tests can override them with fakes, which is why 164 of the 170
 tests run with no database and no network.
 
 One nuance in `/process`: three of its fields arrive as JSON strings inside a
@@ -243,8 +243,9 @@ Short entries, kept because the reasoning matters more than the choice.
 | D6 | Single `access_role` column | Simplest thing that enforces the requirement | Needs a join table for multi-role documents |
 | D7 | Frontend proxies the API (single origin) | No CORS configuration to get wrong, in any environment | The frontend container must know the API paths |
 | D8 | pgvector over a dedicated vector database | One datastore, one backup story, SQL joins to document metadata | Fixed-dimension column; HNSW tuning is manual |
-| D9 | Measure answer faithfulness with embedding similarity, not an LLM judge | Same reasoning as D3, applied to generation: deterministic, free, offline, and unblocked by the judge-model decision `REQ-EVL-05` is still waiting on | Similarity is not entailment — a claim that contradicts the context while resembling it scores as supported, and an honest "I don't know" scores as unfaithful |
-| D10 | Score claims against context **sentences**, not whole chunks | A chunk embedding is dominated by its overall topic, so chunk-level matching passed invented on-topic claims; the first version of the metric could not separate grounded from ungrounded answers at all | One embedding per context sentence instead of per chunk, and a sentence→chunk map to keep citations scorable |
+| D9 | Rank-aware metrics are reported, not used to select the winner | Adding them alongside `answer_similarity` measures the ranking without silently changing which strategy `/evaluate` keeps; the two changes stay separable and reviewable | The eval shows the kept strategy is sometimes *not* the best-ranked one, so the selection rule is now a known open question rather than an answered one |
+| D10 | Measure answer faithfulness with embedding similarity, not an LLM judge | Same reasoning as D3, applied to generation: deterministic, free, offline, and unblocked by the judge-model decision `REQ-EVL-05` is still waiting on | Similarity is not entailment — a claim that contradicts the context while resembling it scores as supported, and an honest "I don't know" scores as unfaithful |
+| D11 | Score claims against context **sentences**, not whole chunks | A chunk embedding is dominated by its overall topic, so chunk-level matching passed invented on-topic claims; the first version of the metric could not separate grounded from ungrounded answers at all | One embedding per context sentence instead of per chunk, and a sentence→chunk map to keep citations scorable |
 
 ## 8. Extension points
 
@@ -264,9 +265,13 @@ Where new work attaches, and what it must not disturb:
   through the shipped `Answering.build_prompt`, so re-running it measures the
   change directly. The client is seeded, but generation is not bit-reproducible:
   compare the *ordering* across the eval's conditions, not single digits.
-- **Richer eval metrics** — rank-aware metrics attach to the same labelled Q&A
-  set `/evaluate` already takes (`REQ-EVL-04`); the LLM-judge eval stays *offline*
-  in `backend/evals/`, never in the request path (`REQ-EVL-05`).
+- **Richer eval metrics** — rank-aware metrics now attach to the same labelled
+  Q&A set `/evaluate` already takes (`REQ-EVL-04`, shipped); a further metric adds
+  a function to `services/rank_metrics.py` and a column to the aggregation, and
+  must stay out of the selection rule. Answer-quality metrics attach instead to
+  `services/generation/faithfulness.py` and its offline eval (`REQ-EVL-06`). The
+  LLM-judge eval stays *offline* in `backend/evals/`, never in the request path
+  (`REQ-EVL-05`).
 
 The constraint that governs all of them: **a stage isn't done until an eval
 measures it.** The interfaces exist to keep that comparison honest — same data,

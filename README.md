@@ -183,9 +183,11 @@ curl -X POST http://localhost:8000/evaluate \
 #      "chunking_strategy": "semantic",          # the one that remains
 #      "evaluations": [                          # best first
 #        {"strategy": "semantic", "questions": 2,
-#         "answer_similarity": 0.81, "hit_rate": 1.0, "selected": true},
+#         "answer_similarity": 0.81, "hit_rate": 1.0,
+#         "recall_at_k": 0.75, "mrr": 1.0, "ndcg_at_k": 0.92, "selected": true},
 #        {"strategy": "fixed", "questions": 2,
-#         "answer_similarity": 0.63, "hit_rate": 0.5, "selected": false}
+#         "answer_similarity": 0.63, "hit_rate": 0.5,
+#         "recall_at_k": 0.5, "mrr": 0.5, "ndcg_at_k": 0.63, "selected": false}
 #      ] }
 ```
 
@@ -207,6 +209,31 @@ How the winner is chosen — a labelled retrieval eval driven by your `qa_pairs`
   the ranking metric; the highest wins. **`hit_rate`** is the fraction of questions
   whose answer was matched above a similarity threshold. The per-question scores are
   aggregated per strategy with **pandas**.
+
+Those two say how *close* the best chunk came. They say nothing about **where in
+the ranking** it landed — surfacing the answer at position 1 and at position 5
+score the same. Three standard rank-aware metrics are reported alongside them
+(`services/rank_metrics.py`), using the same relevance threshold as `hit_rate`, so
+"relevant" means one thing throughout:
+
+- **`recall_at_k`** — of all the chunks that could have answered the question, the
+  share that reached the top `top_k`. The denominator is the **whole document**, not
+  just what was retrieved, so a strategy holding more relevant chunks than `top_k`
+  has room for scores below 1.0 however well it ranks.
+- **`mrr`** — mean reciprocal rank: `1/position` of the first relevant chunk, so
+  position 1 scores 1.0 and position 4 scores 0.25. How fast a reader reaches
+  something useful.
+- **`ndcg_at_k`** — rewards ranking *every* relevant chunk early, not just the first,
+  normalised against the best ordering that retrieval could have had.
+
+`recall_at_k` and `ndcg_at_k` are **`null`** when no chunk in the document matches a
+question's expected answer at all — undefined rather than zero, since a retriever
+cannot miss what is not there. A `null` next to a `hit_rate` of 0 usually means the
+question set does not match the document.
+
+> **These are reported, not used to pick the winner.** `answer_similarity` alone
+> still selects the strategy that is kept, so the numbers are a measurement of the
+> current behaviour rather than a change to it.
 
 > This measures **retrieval quality on your labelled questions** — the strategy that
 > best surfaces the answers you care about. Give it questions whose answers live in
@@ -308,6 +335,7 @@ backend/                   the Python/RAG service (run uv commands from here)
   services/
     file_processing.py     /process: detect → extract → chunk → embed → store
     evaluation.py          /evaluate: retrieve per strategy vs Q&A → rank → keep the best
+    rank_metrics.py        recall@k / MRR / nDCG@k over a ranked retrieval (pure math)
     retrieval.py           /retrieve: embed query → similarity search
     answering.py           /answer: retrieve → augment prompt → generate
     chunking/              Chunker interface + fixed-size, semantic, structural
@@ -315,7 +343,7 @@ backend/                   the Python/RAG service (run uv commands from here)
     generation/            LLMClient interface + Ollama backend + answer-faithfulness metric
     storage/               PostgresStorage (pgvector reads/writes)
   db/schema.sql            documents + chunks tables, FK + HNSW cosine index
-  evals/                   reproducible evals (chunking comparison, answer faithfulness)
+  evals/                   reproducible evals (chunking, retrieval ranking, answer faithfulness)
   tests/                   pytest: fast offline units + DB integration (marked)
   Dockerfile               app image (uv, uvicorn)
   pyproject.toml, uv.lock  dependencies + pinned lockfile
@@ -373,12 +401,13 @@ DATABASE_URL=postgresql://rag:rag@localhost:5435/rag uv run pytest -m integratio
 ```
 
 **Evals** are reproducible and checked in as regenerable artifacts. The strategy
-comparison embeds sentences, so it needs the Ollama service running (run from
-`backend/`):
+comparison and the retrieval ranking eval both embed text, so they need the Ollama
+service running (run from `backend/`):
 
 ```bash
 uv run python -m evals.fixed_size_chunking_eval    # fixed-size baseline sweep
 uv run python -m evals.chunking_strategies_eval    # fixed vs semantic vs structural
+uv run python -m evals.retrieval_ranking_eval      # rank-aware retrieval metrics per strategy
 uv run python -m evals.answer_faithfulness_eval    # is a generated answer grounded?
 ```
 
@@ -393,6 +422,25 @@ distinct from its neighbours. On the flat document it has no markers to find,
 falls back to paragraphs and lands with the rest (`-0.21`, against `-0.20`
 semantic) — a structure-aware strategy is only as good as the structure it is
 given.
+
+The **retrieval ranking eval** (`evals/retrieval_ranking_eval.py`) scores the same
+two documents against a labelled Q&A set (`evals/data/sample_qa.json`, 7 and 8
+questions) at `k=3` and `k=5`, reporting recall@k, MRR and nDCG@k per strategy. It
+drives the real `Evaluation` service against an in-memory stand-in for pgvector, so
+the numbers are the ones `/evaluate` reports and no database is needed.
+
+Its finding is that **the strategy `/evaluate` keeps is not the best-ranked one**,
+on either document. On the flat sample at `k=3`, `fixed-64` wins on answer
+similarity (`0.762`) and is kept — yet it has the worst ranking in the table
+(recall `0.738`, MRR `0.786`, nDCG `0.771`), while `structural` sits `0.003` behind
+on similarity (`0.759`) and is perfect on all three. On the structured document
+`structural` is kept (`0.803`) but surfaces only half the relevant chunks at
+`k=3` (recall `0.498`, rising to `0.850` at `k=5`), where `semantic` reaches recall
+`1.000` and nDCG `0.989` at a much lower `0.658` similarity. Selection is
+deliberately unchanged by this work — the eval measures the current rule rather
+than replacing it — but it makes revisiting that rule a question with numbers
+behind it. Read recall with the chunk counts in view: a strategy whose whole
+document is smaller than `k` retrieves everything and scores `1.000` for free.
 
 ### Answer faithfulness: is the answer grounded?
 
@@ -450,6 +498,7 @@ Three things worth naming:
   gap is a check and not the objective. It is specific to `nomic-embed-text` and
   fitted on a small set — which is why `mean_support`, needing no threshold, is
   the number to trust.
+
 
 **CI.** Every pull request touching `backend/**` runs the same gates on GitHub
 Actions, against a lockfile-pinned install: `ruff format --check`, `ruff check`,
@@ -525,10 +574,11 @@ Planned but **not yet implemented**:
 - **More chunking strategies** — recursive and LLM-based, each behind the existing
   `Chunker` interface so they plug into the same pipeline as the fixed-size,
   semantic and structural strategies.
-- **Richer retrieval metrics** — `/evaluate` already ranks strategies by a labelled
-  retrieval eval (answer-match similarity over caller-supplied Q&A). A natural next
-  step is standard rank-aware metrics (recall@k / MRR / nDCG) over the same labelled
-  set. An in-loop **LLM judge** for answer correctness is deliberately **out of
+- **Retrieval-driven strategy selection** — `/evaluate` now reports rank-aware
+  metrics (recall@k / MRR / nDCG) beside answer similarity, and they show the kept
+  strategy is sometimes not the best-ranked one. Whether selection should weigh them
+  is an open question, deliberately left separate from reporting them. An in-loop
+  **LLM judge** for answer correctness is deliberately **out of
   scope** for the online endpoint: the scorer stays open-source and cost-free by
   using local embedding similarity, and the Q&A pairs are authored externally (e.g.
   by an LLM offline). A fully-local, offline LLM-judge eval is sketched separately —
@@ -539,9 +589,10 @@ Planned but **not yet implemented**:
   `access_role`.
 - **Extraction:** OCR (Tesseract) and richer extraction (Docling); non-PDF types.
 - **Web scraping:** Firecrawl / headless-browser / BeautifulSoup ingestion.
-- **More evals:** embedding/retrieval quality (recall@k / MRR). Answer
-  faithfulness for generation has shipped — see
-  [Answer faithfulness](#answer-faithfulness-is-the-answer-grounded).
+- **More evals:** extraction, embedding and storage quality — the three stages
+  still without one. Retrieval ranking and
+  [answer faithfulness](#answer-faithfulness-is-the-answer-grounded) are both
+  covered above.
 - **Validation:** LLM-based output validation alongside the Pydantic schemas.
 
 ## Proposal: LLM-judge evaluation with RAGAS
