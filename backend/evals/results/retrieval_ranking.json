@@ -1,0 +1,252 @@
+{
+  "embedding_model": "nomic-embed-text",
+  "relevance_threshold": 0.6,
+  "datasets": [
+    {
+      "dataset": "sample.txt",
+      "questions": 7,
+      "chunks_per_strategy": {
+        "fixed-64": 5,
+        "fixed-128": 3,
+        "fixed-256": 2,
+        "semantic": 2,
+        "structural": 4
+      },
+      "runs": [
+        {
+          "top_k": 3,
+          "strategies": [
+            {
+              "strategy": "fixed-64",
+              "questions": 7,
+              "answer_similarity": 0.7623,
+              "hit_rate": 0.8571,
+              "recall_at_k": 0.7381,
+              "mrr": 0.7857,
+              "ndcg_at_k": 0.771,
+              "selected": true
+            },
+            {
+              "strategy": "structural",
+              "questions": 7,
+              "answer_similarity": 0.7594,
+              "hit_rate": 1.0,
+              "recall_at_k": 1.0,
+              "mrr": 1.0,
+              "ndcg_at_k": 1.0,
+              "selected": false
+            },
+            {
+              "strategy": "fixed-128",
+              "questions": 7,
+              "answer_similarity": 0.7154,
+              "hit_rate": 1.0,
+              "recall_at_k": 1.0,
+              "mrr": 0.9048,
+              "ndcg_at_k": 0.9286,
+              "selected": false
+            },
+            {
+              "strategy": "semantic",
+              "questions": 7,
+              "answer_similarity": 0.6996,
+              "hit_rate": 0.8571,
+              "recall_at_k": 1.0,
+              "mrr": 0.8571,
+              "ndcg_at_k": 1.0,
+              "selected": false
+            },
+            {
+              "strategy": "fixed-256",
+              "questions": 7,
+              "answer_similarity": 0.6783,
+              "hit_rate": 1.0,
+              "recall_at_k": 1.0,
+              "mrr": 0.9286,
+              "ndcg_at_k": 0.9473,
+              "selected": false
+            }
+          ]
+        },
+        {
+          "top_k": 5,
+          "strategies": [
+            {
+              "strategy": "fixed-64",
+              "questions": 7,
+              "answer_similarity": 0.7805,
+              "hit_rate": 1.0,
+              "recall_at_k": 1.0,
+              "mrr": 0.8143,
+              "ndcg_at_k": 0.8552,
+              "selected": true
+            },
+            {
+              "strategy": "structural",
+              "questions": 7,
+              "answer_similarity": 0.7594,
+              "hit_rate": 1.0,
+              "recall_at_k": 1.0,
+              "mrr": 1.0,
+              "ndcg_at_k": 1.0,
+              "selected": false
+            },
+            {
+              "strategy": "fixed-128",
+              "questions": 7,
+              "answer_similarity": 0.7154,
+              "hit_rate": 1.0,
+              "recall_at_k": 1.0,
+              "mrr": 0.9048,
+              "ndcg_at_k": 0.9286,
+              "selected": false
+            },
+            {
+              "strategy": "semantic",
+              "questions": 7,
+              "answer_similarity": 0.6996,
+              "hit_rate": 0.8571,
+              "recall_at_k": 1.0,
+              "mrr": 0.8571,
+              "ndcg_at_k": 1.0,
+              "selected": false
+            },
+            {
+              "strategy": "fixed-256",
+              "questions": 7,
+              "answer_similarity": 0.6783,
+              "hit_rate": 1.0,
+              "recall_at_k": 1.0,
+              "mrr": 0.9286,
+              "ndcg_at_k": 0.9473,
+              "selected": false
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "dataset": "structured_sample.txt",
+      "questions": 8,
+      "chunks_per_strategy": {
+        "fixed-64": 9,
+        "fixed-128": 5,
+        "fixed-256": 3,
+        "semantic": 3,
+        "structural": 11
+      },
+      "runs": [
+        {
+          "top_k": 3,
+          "strategies": [
+            {
+              "strategy": "structural",
+              "questions": 8,
+              "answer_similarity": 0.8034,
+              "hit_rate": 1.0,
+              "recall_at_k": 0.4979,
+              "mrr": 1.0,
+              "ndcg_at_k": 0.7449,
+              "selected": true
+            },
+            {
+              "strategy": "fixed-64",
+              "questions": 8,
+              "answer_similarity": 0.7416,
+              "hit_rate": 1.0,
+              "recall_at_k": 0.5223,
+              "mrr": 0.9375,
+              "ndcg_at_k": 0.713,
+              "selected": false
+            },
+            {
+              "strategy": "fixed-128",
+              "questions": 8,
+              "answer_similarity": 0.6942,
+              "hit_rate": 1.0,
+              "recall_at_k": 0.8438,
+              "mrr": 1.0,
+              "ndcg_at_k": 0.8933,
+              "selected": false
+            },
+            {
+              "strategy": "semantic",
+              "questions": 8,
+              "answer_similarity": 0.658,
+              "hit_rate": 0.875,
+              "recall_at_k": 1.0,
+              "mrr": 0.875,
+              "ndcg_at_k": 0.9885,
+              "selected": false
+            },
+            {
+              "strategy": "fixed-256",
+              "questions": 8,
+              "answer_similarity": 0.6568,
+              "hit_rate": 0.875,
+              "recall_at_k": 1.0,
+              "mrr": 0.7083,
+              "ndcg_at_k": 0.8571,
+              "selected": false
+            }
+          ]
+        },
+        {
+          "top_k": 5,
+          "strategies": [
+            {
+              "strategy": "structural",
+              "questions": 8,
+              "answer_similarity": 0.8034,
+              "hit_rate": 1.0,
+              "recall_at_k": 0.85,
+              "mrr": 1.0,
+              "ndcg_at_k": 0.845,
+              "selected": true
+            },
+            {
+              "strategy": "fixed-64",
+              "questions": 8,
+              "answer_similarity": 0.7416,
+              "hit_rate": 1.0,
+              "recall_at_k": 0.7455,
+              "mrr": 0.9375,
+              "ndcg_at_k": 0.7972,
+              "selected": false
+            },
+            {
+              "strategy": "fixed-128",
+              "questions": 8,
+              "answer_similarity": 0.6995,
+              "hit_rate": 1.0,
+              "recall_at_k": 1.0,
+              "mrr": 1.0,
+              "ndcg_at_k": 0.9559,
+              "selected": false
+            },
+            {
+              "strategy": "semantic",
+              "questions": 8,
+              "answer_similarity": 0.658,
+              "hit_rate": 0.875,
+              "recall_at_k": 1.0,
+              "mrr": 0.875,
+              "ndcg_at_k": 0.9885,
+              "selected": false
+            },
+            {
+              "strategy": "fixed-256",
+              "questions": 8,
+              "answer_similarity": 0.6568,
+              "hit_rate": 0.875,
+              "recall_at_k": 1.0,
+              "mrr": 0.7083,
+              "ndcg_at_k": 0.8571,
+              "selected": false
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
