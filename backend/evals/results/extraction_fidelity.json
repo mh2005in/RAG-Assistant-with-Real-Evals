@@ -1,0 +1,263 @@
+{
+  "extractor": "pymupdf",
+  "pymupdf_version": "1.28.0",
+  "seed": 20260902,
+  "datasets": [
+    {
+      "dataset": "sample.txt",
+      "pages": 3,
+      "document_words": 273,
+      "words_per_page": [
+        116,
+        91,
+        66
+      ],
+      "layouts": [
+        {
+          "layout": "single_column",
+          "font_size": 10.0,
+          "arms": [
+            {
+              "arm": "shipped",
+              "pages_extracted": 3,
+              "words_extracted": 273,
+              "page_recall": 1.0,
+              "page_precision": 1.0,
+              "order_fidelity": 1.0,
+              "document_recall": 1.0
+            },
+            {
+              "arm": "blocks",
+              "pages_extracted": 3,
+              "words_extracted": 273,
+              "page_recall": 1.0,
+              "page_precision": 1.0,
+              "order_fidelity": 1.0,
+              "document_recall": 1.0
+            },
+            {
+              "arm": "words",
+              "pages_extracted": 3,
+              "words_extracted": 273,
+              "page_recall": 1.0,
+              "page_precision": 1.0,
+              "order_fidelity": 1.0,
+              "document_recall": 1.0
+            },
+            {
+              "arm": "sorted",
+              "pages_extracted": 3,
+              "words_extracted": 273,
+              "page_recall": 1.0,
+              "page_precision": 1.0,
+              "order_fidelity": 1.0,
+              "document_recall": 1.0
+            },
+            {
+              "arm": "shuffled",
+              "pages_extracted": 3,
+              "words_extracted": 273,
+              "page_recall": 1.0,
+              "page_precision": 1.0,
+              "order_fidelity": 0.0918,
+              "document_recall": 1.0
+            }
+          ],
+          "page_exclusion": {
+            "excluded_page": 2,
+            "pages_after_exclusion": 3,
+            "page_numbering_preserved": true,
+            "kept_recall": 1.0,
+            "leaked_words": 0
+          }
+        },
+        {
+          "layout": "two_column",
+          "font_size": 10.0,
+          "arms": [
+            {
+              "arm": "shipped",
+              "pages_extracted": 3,
+              "words_extracted": 273,
+              "page_recall": 1.0,
+              "page_precision": 1.0,
+              "order_fidelity": 1.0,
+              "document_recall": 1.0
+            },
+            {
+              "arm": "blocks",
+              "pages_extracted": 3,
+              "words_extracted": 273,
+              "page_recall": 1.0,
+              "page_precision": 1.0,
+              "order_fidelity": 1.0,
+              "document_recall": 1.0
+            },
+            {
+              "arm": "words",
+              "pages_extracted": 3,
+              "words_extracted": 273,
+              "page_recall": 1.0,
+              "page_precision": 1.0,
+              "order_fidelity": 1.0,
+              "document_recall": 1.0
+            },
+            {
+              "arm": "sorted",
+              "pages_extracted": 3,
+              "words_extracted": 273,
+              "page_recall": 1.0,
+              "page_precision": 1.0,
+              "order_fidelity": 0.5497,
+              "document_recall": 1.0
+            },
+            {
+              "arm": "shuffled",
+              "pages_extracted": 3,
+              "words_extracted": 273,
+              "page_recall": 1.0,
+              "page_precision": 1.0,
+              "order_fidelity": 0.1042,
+              "document_recall": 1.0
+            }
+          ],
+          "page_exclusion": {
+            "excluded_page": 2,
+            "pages_after_exclusion": 3,
+            "page_numbering_preserved": true,
+            "kept_recall": 1.0,
+            "leaked_words": 0
+          }
+        }
+      ]
+    },
+    {
+      "dataset": "structured_sample.txt",
+      "pages": 3,
+      "document_words": 556,
+      "words_per_page": [
+        200,
+        192,
+        164
+      ],
+      "layouts": [
+        {
+          "layout": "single_column",
+          "font_size": 10.0,
+          "arms": [
+            {
+              "arm": "shipped",
+              "pages_extracted": 3,
+              "words_extracted": 556,
+              "page_recall": 1.0,
+              "page_precision": 1.0,
+              "order_fidelity": 1.0,
+              "document_recall": 1.0
+            },
+            {
+              "arm": "blocks",
+              "pages_extracted": 3,
+              "words_extracted": 556,
+              "page_recall": 1.0,
+              "page_precision": 1.0,
+              "order_fidelity": 1.0,
+              "document_recall": 1.0
+            },
+            {
+              "arm": "words",
+              "pages_extracted": 3,
+              "words_extracted": 556,
+              "page_recall": 1.0,
+              "page_precision": 1.0,
+              "order_fidelity": 1.0,
+              "document_recall": 1.0
+            },
+            {
+              "arm": "sorted",
+              "pages_extracted": 3,
+              "words_extracted": 556,
+              "page_recall": 1.0,
+              "page_precision": 1.0,
+              "order_fidelity": 1.0,
+              "document_recall": 1.0
+            },
+            {
+              "arm": "shuffled",
+              "pages_extracted": 3,
+              "words_extracted": 556,
+              "page_recall": 1.0,
+              "page_precision": 1.0,
+              "order_fidelity": 0.0924,
+              "document_recall": 1.0
+            }
+          ],
+          "page_exclusion": {
+            "excluded_page": 2,
+            "pages_after_exclusion": 3,
+            "page_numbering_preserved": true,
+            "kept_recall": 1.0,
+            "leaked_words": 0
+          }
+        },
+        {
+          "layout": "two_column",
+          "font_size": 10.0,
+          "arms": [
+            {
+              "arm": "shipped",
+              "pages_extracted": 3,
+              "words_extracted": 556,
+              "page_recall": 1.0,
+              "page_precision": 1.0,
+              "order_fidelity": 1.0,
+              "document_recall": 1.0
+            },
+            {
+              "arm": "blocks",
+              "pages_extracted": 3,
+              "words_extracted": 556,
+              "page_recall": 1.0,
+              "page_precision": 1.0,
+              "order_fidelity": 1.0,
+              "document_recall": 1.0
+            },
+            {
+              "arm": "words",
+              "pages_extracted": 3,
+              "words_extracted": 556,
+              "page_recall": 1.0,
+              "page_precision": 1.0,
+              "order_fidelity": 1.0,
+              "document_recall": 1.0
+            },
+            {
+              "arm": "sorted",
+              "pages_extracted": 3,
+              "words_extracted": 556,
+              "page_recall": 1.0,
+              "page_precision": 1.0,
+              "order_fidelity": 0.5923,
+              "document_recall": 1.0
+            },
+            {
+              "arm": "shuffled",
+              "pages_extracted": 3,
+              "words_extracted": 556,
+              "page_recall": 1.0,
+              "page_precision": 1.0,
+              "order_fidelity": 0.0819,
+              "document_recall": 1.0
+            }
+          ],
+          "page_exclusion": {
+            "excluded_page": 2,
+            "pages_after_exclusion": 3,
+            "page_numbering_preserved": true,
+            "kept_recall": 1.0,
+            "leaked_words": 0
+          }
+        }
+      ]
+    }
+  ]
+}

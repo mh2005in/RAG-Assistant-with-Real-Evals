@@ -24,14 +24,32 @@ committed as regenerable JSON in
 [`backend/evals/results/`](../../backend/evals/results/). Run everything from
 `backend/`.
 
-| Eval | Command | Needs |
-| --- | --- | --- |
-| Fixed-size baseline sweep | `uv run python -m evals.fixed_size_chunking_eval` | Nothing |
-| Strategy comparison (fixed vs semantic vs structural) | `uv run python -m evals.chunking_strategies_eval` | **Ollama running** — it embeds sentences |
+One per pipeline stage. Four of them carry a **control arm** — an arrangement that
+must score badly (`shuffled`, `random`, `closed_book`/`distractor`) — so a run
+where the control scores like a real arm is a broken metric, not a good result.
+Say so if you see it. The chunking and retrieval evals have no control arm: they
+compare real candidates only, so a flat or surprising table there is a finding to
+report, not a broken metric.
+
+| Stage | Eval | Command | Needs |
+| --- | --- | --- | --- |
+| Extraction | PDF round-trip fidelity | `uv run python -m evals.extraction_fidelity_eval` | Nothing (control: `shuffled`) |
+| Chunking | Fixed-size baseline sweep | `uv run python -m evals.fixed_size_chunking_eval` | Nothing |
+| Chunking | Strategy comparison (fixed vs semantic vs structural) | `uv run python -m evals.chunking_strategies_eval` | **Ollama** — it embeds sentences |
+| Embedding | Triplet accuracy + the similarity floor | `uv run python -m evals.embedding_quality_eval` | **Ollama** (control: `random`) |
+| Storage | HNSW recall against exact search | `uv run python -m evals.storage_index_eval` | **Ollama _and_ a live Postgres** (`DATABASE_URL=…`); control: `random` |
+| Retrieval | Rank-aware metrics per strategy | `uv run python -m evals.retrieval_ranking_eval` | **Ollama** |
+| Generation | Answer faithfulness | `uv run python -m evals.answer_faithfulness_eval` | **Ollama** (embeds *and* generates — the slowest); controls: `distractor`, `closed_book` |
+
+The storage eval is the only one that needs a database: it measures an approximate
+index, which no in-memory stand-in can imitate. It loads several thousand rows
+through the real ingest path and deletes them again, so give it a long timeout and
+expect a few minutes.
 
 Datasets: `evals/data/sample.txt` (273 words, flat prose) and
-`evals/data/structured_sample.txt` (556 words, carries section markers). Both are
-small — say so when a difference is narrow.
+`evals/data/structured_sample.txt` (556 words, carries section markers), plus the
+labelled `sample_qa.json`, `faithfulness_questions.json` and
+`embedding_triplets.json`. All are small — say so when a difference is narrow.
 
 ## Test tiers
 

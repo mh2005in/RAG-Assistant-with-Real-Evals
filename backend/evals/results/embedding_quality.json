@@ -1,0 +1,264 @@
+{
+  "embedding_model": "nomic-embed-text",
+  "arms": [
+    "nomic-embed-text",
+    "nomic-embed-text+task-prefix",
+    "lexical-tfidf",
+    "random"
+  ],
+  "seed": 20260902,
+  "thresholds": {
+    "answer_match": 0.6,
+    "support": 0.75
+  },
+  "datasets": [
+    {
+      "dataset": "sample.txt",
+      "triplets": 8,
+      "arms": [
+        {
+          "arm": "nomic-embed-text",
+          "triplets": 8,
+          "positive_cosine": 0.6178,
+          "hard_negative_cosine": 0.8373,
+          "hard_accuracy": 0.0,
+          "hard_margin": -0.2196,
+          "easy_negative_cosine": 0.5462,
+          "easy_accuracy": 0.875,
+          "easy_margin": 0.0716
+        },
+        {
+          "arm": "nomic-embed-text+task-prefix",
+          "triplets": 8,
+          "positive_cosine": 0.6625,
+          "hard_negative_cosine": 0.8447,
+          "hard_accuracy": 0.0,
+          "hard_margin": -0.1822,
+          "easy_negative_cosine": 0.6174,
+          "easy_accuracy": 0.875,
+          "easy_margin": 0.0451
+        },
+        {
+          "arm": "lexical-tfidf",
+          "triplets": 8,
+          "positive_cosine": 0.0806,
+          "hard_negative_cosine": 0.5127,
+          "hard_accuracy": 0.0,
+          "hard_margin": -0.4321,
+          "easy_negative_cosine": 0.0468,
+          "easy_accuracy": 0.5,
+          "easy_margin": 0.0338
+        },
+        {
+          "arm": "random",
+          "triplets": 8,
+          "positive_cosine": 0.003,
+          "hard_negative_cosine": -0.0121,
+          "hard_accuracy": 0.75,
+          "hard_margin": 0.0151,
+          "easy_negative_cosine": -0.0115,
+          "easy_accuracy": 0.5,
+          "easy_margin": 0.0145
+        }
+      ]
+    },
+    {
+      "dataset": "structured_sample.txt",
+      "triplets": 8,
+      "arms": [
+        {
+          "arm": "nomic-embed-text",
+          "triplets": 8,
+          "positive_cosine": 0.5902,
+          "hard_negative_cosine": 0.9423,
+          "hard_accuracy": 0.0,
+          "hard_margin": -0.3521,
+          "easy_negative_cosine": 0.5104,
+          "easy_accuracy": 0.75,
+          "easy_margin": 0.0798
+        },
+        {
+          "arm": "nomic-embed-text+task-prefix",
+          "triplets": 8,
+          "positive_cosine": 0.6531,
+          "hard_negative_cosine": 0.9234,
+          "hard_accuracy": 0.0,
+          "hard_margin": -0.2704,
+          "easy_negative_cosine": 0.6115,
+          "easy_accuracy": 0.625,
+          "easy_margin": 0.0416
+        },
+        {
+          "arm": "lexical-tfidf",
+          "triplets": 8,
+          "positive_cosine": 0.0573,
+          "hard_negative_cosine": 0.7041,
+          "hard_accuracy": 0.0,
+          "hard_margin": -0.6468,
+          "easy_negative_cosine": 0.0451,
+          "easy_accuracy": 0.5,
+          "easy_margin": 0.0122
+        },
+        {
+          "arm": "random",
+          "triplets": 8,
+          "positive_cosine": -0.0088,
+          "hard_negative_cosine": -0.005,
+          "hard_accuracy": 0.5,
+          "hard_margin": -0.0038,
+          "easy_negative_cosine": -0.014,
+          "easy_accuracy": 0.5,
+          "easy_margin": 0.0052
+        }
+      ]
+    }
+  ],
+  "overall": [
+    {
+      "arm": "nomic-embed-text",
+      "triplets": 16,
+      "positive_cosine": 0.604,
+      "hard_negative_cosine": 0.8898,
+      "hard_accuracy": 0.0,
+      "hard_margin": -0.2858,
+      "easy_negative_cosine": 0.5283,
+      "easy_accuracy": 0.8125,
+      "easy_margin": 0.0757,
+      "by_hard_negative_kind": [
+        {
+          "kind": "adjacent_fact",
+          "triplets": 4,
+          "hard_accuracy": 0.0,
+          "hard_margin": -0.145
+        },
+        {
+          "kind": "inversion",
+          "triplets": 12,
+          "hard_accuracy": 0.0,
+          "hard_margin": -0.3328
+        }
+      ]
+    },
+    {
+      "arm": "nomic-embed-text+task-prefix",
+      "triplets": 16,
+      "positive_cosine": 0.6578,
+      "hard_negative_cosine": 0.8841,
+      "hard_accuracy": 0.0,
+      "hard_margin": -0.2263,
+      "easy_negative_cosine": 0.6144,
+      "easy_accuracy": 0.75,
+      "easy_margin": 0.0433,
+      "by_hard_negative_kind": [
+        {
+          "kind": "adjacent_fact",
+          "triplets": 4,
+          "hard_accuracy": 0.0,
+          "hard_margin": -0.1171
+        },
+        {
+          "kind": "inversion",
+          "triplets": 12,
+          "hard_accuracy": 0.0,
+          "hard_margin": -0.2627
+        }
+      ]
+    },
+    {
+      "arm": "lexical-tfidf",
+      "triplets": 16,
+      "positive_cosine": 0.069,
+      "hard_negative_cosine": 0.6084,
+      "hard_accuracy": 0.0,
+      "hard_margin": -0.5394,
+      "easy_negative_cosine": 0.046,
+      "easy_accuracy": 0.5,
+      "easy_margin": 0.023,
+      "by_hard_negative_kind": [
+        {
+          "kind": "adjacent_fact",
+          "triplets": 4,
+          "hard_accuracy": 0.0,
+          "hard_margin": -0.3579
+        },
+        {
+          "kind": "inversion",
+          "triplets": 12,
+          "hard_accuracy": 0.0,
+          "hard_margin": -0.5999
+        }
+      ]
+    },
+    {
+      "arm": "random",
+      "triplets": 16,
+      "positive_cosine": -0.0029,
+      "hard_negative_cosine": -0.0086,
+      "hard_accuracy": 0.625,
+      "hard_margin": 0.0056,
+      "easy_negative_cosine": -0.0128,
+      "easy_accuracy": 0.5,
+      "easy_margin": 0.0099,
+      "by_hard_negative_kind": [
+        {
+          "kind": "adjacent_fact",
+          "triplets": 4,
+          "hard_accuracy": 0.75,
+          "hard_margin": 0.0211
+        },
+        {
+          "kind": "inversion",
+          "triplets": 12,
+          "hard_accuracy": 0.5833,
+          "hard_margin": 0.0005
+        }
+      ]
+    }
+  ],
+  "corpus_similarity": [
+    {
+      "arm": "nomic-embed-text",
+      "sentences": 42,
+      "pairs": 861,
+      "mean": 0.5327,
+      "p50": 0.5265,
+      "p90": 0.6375,
+      "max": 0.9285,
+      "share_above_answer_match": 0.2091,
+      "share_above_support": 0.0116
+    },
+    {
+      "arm": "nomic-embed-text+task-prefix",
+      "sentences": 42,
+      "pairs": 861,
+      "mean": 0.6636,
+      "p50": 0.6596,
+      "p90": 0.7379,
+      "max": 0.9623,
+      "share_above_answer_match": 0.8513,
+      "share_above_support": 0.0685
+    },
+    {
+      "arm": "lexical-tfidf",
+      "sentences": 42,
+      "pairs": 861,
+      "mean": 0.0589,
+      "p50": 0.0448,
+      "p90": 0.1359,
+      "max": 0.5171,
+      "share_above_answer_match": 0.0,
+      "share_above_support": 0.0
+    },
+    {
+      "arm": "random",
+      "sentences": 42,
+      "pairs": 861,
+      "mean": 0.0007,
+      "p50": 0.0002,
+      "p90": 0.0468,
+      "max": 0.114,
+      "share_above_answer_match": 0.0,
+      "share_above_support": 0.0
+    }
+  ]
+}
