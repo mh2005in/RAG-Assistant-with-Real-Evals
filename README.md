@@ -108,6 +108,15 @@ RAM/VRAM) in `.env`. When it's up:
 Stop it with `docker compose down` (add `-v` to also wipe the Postgres data and
 pulled models).
 
+The Compose project name is pinned in
+[`docker-compose.yml`](docker-compose.yml), so **every checkout of this
+repository — the root one and any git worktree — is the same stack**. Bringing it
+up from a worktree adopts the containers and volumes that are already there
+instead of starting a second copy that fights the first over the `rag-*` container
+names and the published ports, and `docker compose down` from any checkout stops
+it. The trade-off is that two checkouts cannot run the stack simultaneously; they
+never could, since they share the host ports.
+
 ## Using the API
 
 **1. Process a document** (multipart form):
