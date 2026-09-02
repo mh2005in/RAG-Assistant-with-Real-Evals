@@ -1,8 +1,8 @@
 # RAG Assistant with Real Evals
 
 A local-first **Retrieval-Augmented Generation (RAG)** service built with an
-**evaluation-driven** approach: every pipeline stage is meant to be measured with
-real evals, not vibes. Upload a document, and the app extracts, chunks, embeds,
+**evaluation-driven** approach: every pipeline stage is measured by a real,
+checked-in eval, not vibes. Upload a document, and the app extracts, chunks, embeds,
 and stores it; then ask questions and get answers grounded in — and cited from —
 your own documents.
 
@@ -343,7 +343,7 @@ backend/                   the Python/RAG service (run uv commands from here)
     generation/            LLMClient interface + Ollama backend + answer-faithfulness metric
     storage/               PostgresStorage (pgvector reads/writes)
   db/schema.sql            documents + chunks tables, FK + HNSW cosine index
-  evals/                   reproducible evals (chunking, retrieval ranking, answer faithfulness)
+  evals/                   reproducible evals — one per pipeline stage (+ data/, results/)
   tests/                   pytest: fast offline units + DB integration (marked)
   Dockerfile               app image (uv, uvicorn)
   pyproject.toml, uv.lock  dependencies + pinned lockfile
@@ -400,16 +400,75 @@ compose stack up (run from `backend/`):
 DATABASE_URL=postgresql://rag:rag@localhost:5435/rag uv run pytest -m integration
 ```
 
-**Evals** are reproducible and checked in as regenerable artifacts. The strategy
-comparison and the retrieval ranking eval both embed text, so they need the Ollama
-service running (run from `backend/`):
+**Evals** are reproducible and checked in as regenerable artifacts, and **every
+pipeline stage has one**. Four of them (extraction, embedding, storage,
+generation) carry a control arm — an arrangement that must score badly — because a
+metric that cannot fail is not measuring anything; the chunking and retrieval
+evals predate that convention and compare real candidates only. Run from
+`backend/`:
 
 ```bash
+uv run python -m evals.extraction_fidelity_eval    # does the text survive the PDF?
 uv run python -m evals.fixed_size_chunking_eval    # fixed-size baseline sweep
 uv run python -m evals.chunking_strategies_eval    # fixed vs semantic vs structural
+uv run python -m evals.embedding_quality_eval      # does "close" mean "means the same"?
+uv run python -m evals.storage_index_eval          # how approximate is the HNSW index?
 uv run python -m evals.retrieval_ranking_eval      # rank-aware retrieval metrics per strategy
 uv run python -m evals.answer_faithfulness_eval    # is a generated answer grounded?
 ```
+
+Most of them embed text, so they need the Ollama service running. Two are
+different: the extraction eval needs neither Ollama nor a database, and the storage
+eval needs **both** Ollama and a live PostgreSQL/pgvector — it is measuring the
+index, which no in-memory stand-in can imitate. Give it the database the same way
+the integration tests get it:
+
+```bash
+DATABASE_URL=postgresql://rag:rag@localhost:5435/rag uv run python -m evals.storage_index_eval
+```
+
+### Extraction fidelity: does the text survive the PDF?
+
+Every other eval starts from a `.txt` fixture, which skips the stage that turns a
+binary PDF into text. `evals/extraction_fidelity_eval.py` does not: it lays the
+same two sample documents out into a PDF with PyMuPDF at run time — source
+documents are never committed, so the eval makes its own — keeps the words it laid
+out as ground truth, and then extracts them back five different ways. Two layouts,
+because they stress different things: one column, and two columns where reading
+order becomes a choice rather than a given.
+
+| arm | one column | two columns |
+| --- | --- | --- |
+| **shipped** (`get_text()`) | **1.000** | **1.000** |
+| `blocks`, `words` | 1.000 | 1.000 |
+| `sorted` (`sort=True`) | 1.000 | **0.550 / 0.592** |
+| `shuffled` *(control)* | 0.092 | 0.104 / 0.082 |
+
+*(order fidelity, `sample.txt` / `structured_sample.txt`. Recall and precision are
+1.000 for every arm on every layout, including the control.)*
+
+Three things come out of it:
+
+- **The shipped extractor is lossless here** — recall, precision, order and
+  per-page attribution all 1.000, on both layouts. That is now measured rather
+  than assumed.
+- **The obvious "improvement" is a regression.** `get_text("text", sort=True)`
+  sounds like the tidier option and reads a two-column page straight across,
+  interleaving the columns: order fidelity falls to `0.55`–`0.59` while **not
+  losing a single word**. Recall alone would have called it perfect.
+- **The control earns the other numbers.** `shuffled` keeps every word and destroys
+  only the order, and scores 1.000 recall against ~0.09 order fidelity — which is
+  what says the two metrics are measuring different things.
+
+The eval also runs page exclusion (`REQ-EXT-02`) through the same round trip: with
+page 2 excluded, three pages still come back, the surviving pages keep all their
+words (`kept_recall` 1.000) and no word unique to the excluded page leaks through
+(`leaked_words` 0). The unit tests prove that over a list of strings; this proves
+it over text that has actually been through a PDF — and it caught a real bug while
+being written, when the eval passed the wrong field name to `PageExclusion` and
+excluded nothing at all.
+
+### Chunking strategies: where should the cuts go?
 
 The comparison runs every strategy over two documents — flat prose
 (`evals/data/sample.txt`) and one that marks up its own structure
@@ -422,6 +481,119 @@ distinct from its neighbours. On the flat document it has no markers to find,
 falls back to paragraphs and lands with the rest (`-0.21`, against `-0.20`
 semantic) — a structure-aware strategy is only as good as the structure it is
 given.
+
+### Embedding quality: does "close" mean "means the same"?
+
+The embedder is the coordinate system every other number is computed in, so when
+it is wrong they are all quietly wrong together. `evals/embedding_quality_eval.py`
+measures it directly with 16 hand-written triplets: an anchor, a **paraphrase**
+worded to share almost no vocabulary with it, and two things that should sit
+further away — a **hard negative** that borrows the anchor's vocabulary but not its
+meaning, and an **easy negative** from another subject entirely.
+
+| arm | paraphrase cos | hard-negative accuracy | easy-negative accuracy |
+| --- | --- | --- | --- |
+| **`nomic-embed-text`** (shipped) | 0.604 | **0.000** | **0.812** |
+| `nomic-embed-text` + task prefixes | 0.658 | 0.000 | 0.750 |
+| `lexical-tfidf` *(baseline)* | 0.069 | 0.000 | 0.500 |
+| `random` *(control)* | −0.003 | 0.625 | 0.500 |
+
+*(16 triplets pooled over both documents. Accuracy is the share where the
+paraphrase is closer to the anchor than the negative; the control's 0.625 is ten
+coin flips out of sixteen, i.e. chance.)*
+
+**The shipped embedder knows what text is about and not what it says.** It beats
+chance comfortably on easy negatives (0.812) and **never once** — 0 of 16 — ranks a
+paraphrase above a same-vocabulary contradiction. Nor does anything else tested:
+TF-IDF scores 0/16 too, and by a wider margin (−0.539 against −0.286), so the
+learned embedder is *less* wrong, not right. Splitting the hard negatives by how
+they were written puts the same point another way: on outright **inversions**
+("...sit close together" vs "...sit far apart") the margin is −0.333, and on
+**adjacent facts** from the same document −0.145.
+
+This is a caveat on everything downstream that treats cosine as meaning, the
+faithfulness metric included — and it is why that metric scores claims against
+context *sentences* rather than whole chunks, which is the best available
+mitigation and not a fix.
+
+**The two hard-coded thresholds are only meaningful against the similarity floor.**
+The eval also scores every pair of corpus sentences, so `ANSWER_MATCH_THRESHOLD`
+(0.6) and `SUPPORT_THRESHOLD` (0.75) can be read against what arbitrary text
+already scores:
+
+| arm | mean | p90 | share ≥ 0.6 | share ≥ 0.75 |
+| --- | --- | --- | --- | --- |
+| **`nomic-embed-text`** | 0.533 | 0.637 | **0.209** | 0.012 |
+| + task prefixes | 0.664 | 0.738 | **0.851** | 0.069 |
+
+- **`SUPPORT_THRESHOLD` is doing real work** — only 1.2% of arbitrary sentence
+  pairs clear 0.75, which agrees with the independent sweep in the faithfulness
+  eval.
+- **`ANSWER_MATCH_THRESHOLD` is closer to the noise than it looks.** One arbitrary
+  sentence pair in five already clears 0.6, and the 90th percentile of arbitrary
+  pairs (0.637) sits *above* the mean cosine of a genuine paraphrase (0.604).
+- **Adopting the model's documented task prefixes would break both thresholds.**
+  `nomic-embed-text` is trained with `search_query:` / `search_document:` prefixes
+  that the shipped code does not send. Adding them lifts paraphrase similarity
+  (0.604 → 0.658) but lifts *everything* more: 85% of arbitrary sentence pairs
+  would clear 0.6, and easy-negative accuracy drops (0.812 → 0.750). The prefixes
+  may still be right, but they are a **recalibration**, not a drop-in — which is
+  why this eval reports them as an arm and the pipeline does not use them.
+
+### Storage: how approximate is the index, and is it even used?
+
+`db/schema.sql` builds an HNSW index over cosine distance, and HNSW is an
+*approximate* index — it is fast because it is allowed to miss things, and nothing
+above it can tell when it does. `evals/storage_index_eval.py` is the only eval that
+needs a live database, because that is the one thing no in-memory stand-in can
+imitate: a stand-in ranker is exact by construction and would report the index as
+perfect however it behaved.
+
+It fills the table through the **shipped** ingest path (one row per transaction,
+exactly as `/process` writes them) with 3,000 rows the query may read plus 3,000
+under a second access role it may not, then runs every query four ways per call
+shape: `exact` (index scans disabled — the ground truth), `planner` (plain
+defaults, i.e. what the application actually gets), `hnsw` (`enable_sort = off`,
+which leaves the index as the only ordered path, with `ef_search` swept from 1 to
+100), and `random` as the control.
+
+Two findings, and they point the same way:
+
+- **The planner never chooses the index.** On all three call shapes — `/retrieve`
+  and `/answer`'s role-only search, the same with a strategy filter, and
+  `/evaluate`'s document-scoped search — Postgres gathers the role's chunks
+  through the `document_id` foreign key and sorts them exactly. The plans are
+  recorded in the artifact, so this is read off `EXPLAIN` rather than inferred.
+  A plan's cost does not include detoasting the 3 kB vector it is about to
+  compare, so the sort looks cheaper than it is.
+- **Forcing the index costs no recall either.** With sorting disabled the index
+  *is* used (`forced_uses_hnsw_index` confirms it), and it returns the exact
+  top-k at **every** `ef_search` from 1 to 100, at k = 3, 5 and 10. A few thousand
+  vectors is a small graph and greedy search on a small graph does not get lost.
+
+So the HNSW index currently pays maintenance on every insert and earns nothing on
+any read — search in this system is exact, not approximate, and retrieval quality
+has no ANN ceiling under it today. That is a statement about *this scale*, not
+about HNSW: raise `_ROWS_PER_ROLE` by an order of magnitude to find where it stops
+being true.
+
+**The control is what makes those 1.000s readable.** `random` draws k rows from
+the same population and scores 0.000–0.020 against the same exact answer, so the
+metric can plainly tell a good answer from a bad one — a recall of 1.000 is a real
+1.000 and not a metric stuck on success. The recall figures and the plans reproduce
+exactly between runs; the latency columns do not, and are there to show no arm
+buys its recall with time rather than to rank the arms. (The extraction eval is
+deterministic by construction — nothing in it calls a live service. The embedding
+eval reproduced byte for byte across repeat runs here, but it is only as
+reproducible as Ollama's embeddings are.)
+
+The run also measures the ingest path it uses: **55.9 rows per second** in the
+committed artifact (46–56 across runs), one chunk per transaction with HNSW
+maintenance included. That is the real cost of the "write each chunk as it is
+produced" choice in `/process`, which trades throughput for holding a single chunk
+in memory at a time.
+
+### Retrieval ranking: where in the list does the answer land?
 
 The **retrieval ranking eval** (`evals/retrieval_ranking_eval.py`) scores the same
 two documents against a labelled Q&A set (`evals/data/sample_qa.json`, 7 and 8
@@ -589,10 +761,18 @@ Planned but **not yet implemented**:
   `access_role`.
 - **Extraction:** OCR (Tesseract) and richer extraction (Docling); non-PDF types.
 - **Web scraping:** Firecrawl / headless-browser / BeautifulSoup ingestion.
-- **More evals:** extraction, embedding and storage quality — the three stages
-  still without one. Retrieval ranking and
-  [answer faithfulness](#answer-faithfulness-is-the-answer-grounded) are both
-  covered above.
+- **Recalibrating for `nomic-embed-text`'s task prefixes.** The
+  [embedding eval](#embedding-quality-does-close-mean-means-the-same) shows the
+  model's documented `search_query:` / `search_document:` prefixes lift paraphrase
+  similarity — and lift arbitrary-pair similarity further, putting 85% of the corpus
+  above `ANSWER_MATCH_THRESHOLD`. Adopting them means re-fitting both thresholds
+  and re-running the retrieval and faithfulness evals; it is a change with a
+  measured cost, not a one-line switch.
+- **A meaning-aware relevance signal.** No embedder tested — and no lexical
+  baseline — separates a claim from its reversal (0 of 16 hard triplets). Anything
+  that would (a cross-encoder, an entailment model, the
+  [RAGAS judge](#proposal-llm-judge-evaluation-with-ragas) below) is the same
+  open question `REQ-EVL-05` is blocked on.
 - **Validation:** LLM-based output validation alongside the Pydantic schemas.
 
 ## Proposal: LLM-judge evaluation with RAGAS

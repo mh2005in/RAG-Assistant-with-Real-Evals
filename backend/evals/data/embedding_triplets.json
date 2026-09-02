@@ -1,0 +1,119 @@
+{
+  "_comment": "Anchor/positive/negative triplets for the embedding-quality eval, keyed by the sample document each was written against. Synthetic: both source documents are written for this repository, so nothing here is real user content. The positive is a paraphrase that deliberately shares few words with the anchor, so lexical overlap cannot carry it. Each negative shares the anchor's vocabulary but not its meaning: hard_negative_kind is 'inversion' when it reverses the anchor's claim in near-identical wording, and 'adjacent_fact' when it states a different, neighbouring fact from the same document. easy_negative is a sentence from elsewhere in the corpus, on a different subject.",
+  "sample.txt": [
+    {
+      "anchor": "Retrieval-augmented generation grounds a language model in an external knowledge base so that answers can cite real source material.",
+      "positive": "Tying the model to outside documents lets it point at where each statement came from instead of inventing it.",
+      "hard_negative": "A language model relying solely on parametric memory cites no external knowledge base and grounds its answers in no real source material.",
+      "hard_negative_kind": "inversion",
+      "easy_negative": "Each document carries an access role, and every search is filtered by it."
+    },
+    {
+      "anchor": "Chunks that are too large dilute the signal and waste the context window.",
+      "positive": "Oversized passages bury what matters among filler and burn through the space the model has to read.",
+      "hard_negative": "Chunks that are too small fracture ideas across boundaries and lose the surrounding meaning a reader needs.",
+      "hard_negative_kind": "adjacent_fact",
+      "easy_negative": "Extraction turns a binary document into plain text the rest of the pipeline can work with."
+    },
+    {
+      "anchor": "Fixed-size chunking slices the text stream into windows of a set length, ignoring sentence and section boundaries.",
+      "positive": "The simplest splitter counts off equal spans and pays no attention to where sentences or headings fall.",
+      "hard_negative": "A structure-aware splitter follows the boundaries a document already marks rather than slicing the text stream into windows of a set length.",
+      "hard_negative_kind": "adjacent_fact",
+      "easy_negative": "A file that is not a readable document is rejected outright instead of being silently stored as empty text."
+    },
+    {
+      "anchor": "The virtue of fixed-size chunking is predictability: every chunk except the last has exactly the same size.",
+      "positive": "You know in advance how big each piece will be, which makes throughput easy to reason about.",
+      "hard_negative": "The weakness of fixed-size chunking is that every chunk except the last cuts through the middle of a sentence.",
+      "hard_negative_kind": "adjacent_fact",
+      "easy_negative": "Chunks are written one at a time as they are produced, so a large document never holds all of its chunks in memory."
+    },
+    {
+      "anchor": "Fixed-size chunking cuts through the middle of sentences and can strand an important clause at the edge of a chunk.",
+      "positive": "Slicing blindly leaves half an idea dangling where the retriever is unlikely to surface it whole.",
+      "hard_negative": "Fixed-size chunking never cuts through the middle of a sentence, so no clause is ever stranded at the edge of a chunk.",
+      "hard_negative_kind": "inversion",
+      "easy_negative": "Recall is the share of the passages that should have been retrieved for a question that actually were."
+    },
+    {
+      "anchor": "A typical pipeline ingests documents, splits them into retrievable chunks, embeds each chunk into a vector, and stores those vectors for similarity search.",
+      "positive": "Text comes in, gets broken into pieces, each piece is turned into numbers, and the numbers are kept where they can be looked up by closeness.",
+      "hard_negative": "A typical pipeline ingests documents and stores them whole, splitting them into no chunks and embedding no vectors for similarity search.",
+      "hard_negative_kind": "inversion",
+      "easy_negative": "Exclusion blanks a page rather than dropping it, so the pages that follow retain their original numbers."
+    },
+    {
+      "anchor": "Because it is so simple, fixed-size chunking makes an honest baseline.",
+      "positive": "Being the least clever option is exactly what makes it the right thing to measure everything else against.",
+      "hard_negative": "Fixed-size chunking is too simple to serve as an honest baseline, so cleverer strategies are compared against each other instead.",
+      "hard_negative_kind": "inversion",
+      "easy_negative": "The text of each page is kept separately so that every downstream chunk can still say which page it came from."
+    },
+    {
+      "anchor": "The way a document is divided determines what the retriever can find and how much irrelevant context it drags along.",
+      "positive": "Where you place the cuts decides both what turns up in a search and how much noise comes with it.",
+      "hard_negative": "What the retriever can find is determined by the embedding model, not by the way a document is divided.",
+      "hard_negative_kind": "adjacent_fact",
+      "easy_negative": "Encrypted files, truncated downloads and files that merely claim to be PDFs all fail here."
+    }
+  ],
+  "structured_sample.txt": [
+    {
+      "anchor": "Exclusion blanks a page rather than dropping it, so the pages that follow retain their original numbers.",
+      "positive": "A skipped page is emptied in place, which means nothing after it has to be renumbered.",
+      "hard_negative": "Exclusion drops a page rather than blanking it, so the pages that follow lose their original numbers.",
+      "hard_negative_kind": "inversion",
+      "easy_negative": "The semantic strategy embeds each sentence and breaks where consecutive sentences drift apart in meaning."
+    },
+    {
+      "anchor": "Because exclusion happens before chunking, it behaves identically for every chunking strategy.",
+      "positive": "Running it first means no splitter can see the removed material, whichever splitter is used.",
+      "hard_negative": "Because exclusion happens after chunking, it behaves differently for every chunking strategy.",
+      "hard_negative_kind": "inversion",
+      "easy_negative": "A chunk is a contiguous span of text treated as one retrievable unit."
+    },
+    {
+      "anchor": "A file that is not a readable document is rejected outright instead of being silently stored as empty text.",
+      "positive": "Anything that cannot actually be opened is turned away at the door rather than let through holding nothing.",
+      "hard_negative": "A file that is not a readable document is silently stored as empty text instead of being rejected outright.",
+      "hard_negative_kind": "inversion",
+      "easy_negative": "Every chunk is embedded into a fixed-length vector and written to the store."
+    },
+    {
+      "anchor": "A structure-aware strategy looks for the markers a document already carries: headings, numbered sections, labelled clauses.",
+      "positive": "It splits where the author has already said that one part ends and the next begins.",
+      "hard_negative": "A structure-aware strategy ignores the markers a document already carries and counts off a set number of words instead.",
+      "hard_negative_kind": "inversion",
+      "easy_negative": "Each document carries an access role, and every search is filtered by it."
+    },
+    {
+      "anchor": "The semantic strategy embeds each sentence and breaks where consecutive sentences drift apart in meaning.",
+      "positive": "It watches for the point where the subject changes and cuts there, going by the vectors rather than the layout.",
+      "hard_negative": "The semantic strategy embeds each sentence and breaks where consecutive sentences are closest in meaning.",
+      "hard_negative_kind": "inversion",
+      "easy_negative": "Pages that carry no useful text, such as scanned covers or blank separators, are excluded before anything else runs."
+    },
+    {
+      "anchor": "Chunks are written one at a time as they are produced, so a large document never holds all of its chunks in memory.",
+      "positive": "Each piece goes to the store the moment it exists, which keeps the memory cost flat however long the input is.",
+      "hard_negative": "Chunks are collected and written in a single batch at the end, so a large document holds all of its chunks in memory.",
+      "hard_negative_kind": "inversion",
+      "easy_negative": "Its virtue is predictability, and that makes it an honest baseline for anything more clever to beat."
+    },
+    {
+      "anchor": "A chunk is only ever returned to a caller whose role matches the document it belongs to, so access is enforced in the query.",
+      "positive": "The permission check happens while the search runs, so material the reader may not see never comes back at all.",
+      "hard_negative": "A chunk is returned to any caller and the role is checked after the results come back, rather than in the query.",
+      "hard_negative_kind": "inversion",
+      "easy_negative": "Extraction turns a binary document into plain text the rest of the pipeline can work with."
+    },
+    {
+      "anchor": "An embedding is the vector a model produces for a span of text, positioned so that related spans sit close together.",
+      "positive": "Turning words into coordinates puts things that mean similar things near one another.",
+      "hard_negative": "An embedding is the vector a model produces for a span of text, positioned so that related spans sit far apart.",
+      "hard_negative_kind": "inversion",
+      "easy_negative": "Its virtue is predictability: every chunk except the last has exactly the same size."
+    }
+  ]
+}

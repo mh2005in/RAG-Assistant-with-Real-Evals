@@ -65,8 +65,13 @@ Ten steps, in order:
    the network is marked `integration`. A bug fix ships with a test that fails
    without it.
 6. **Eval the stage** if it's a pipeline stage — comparative, reproducible, with
-   the result artifact committed. This is the step that most often gets skipped
-   and is the one the project exists for.
+   the result artifact committed. A **new** eval also carries a control arm that
+   must score badly, so the metric is shown to be capable of failing (the chunking
+   and retrieval evals predate that rule and have none). Every stage has an eval to join
+   (see the [`eval-runner`](agents/eval-runner.md) table); a new extractor,
+   strategy or model becomes another arm of its stage's eval rather than a new
+   one. This is the step that most often gets skipped and is the one the project
+   exists for.
 7. **Update the README in the same change** — endpoint, architecture, dependency,
    env var, or setup change. Shipped work moves out of Roadmap.
 8. **Verify the deploy** with the `deploy-verify` agent if the change touches a
@@ -84,7 +89,7 @@ A requirement is `Done` only when all of these hold. This is the checklist
 
 - [ ] The acceptance criterion in [Requirements.md](Requirements.md) is observably met
 - [ ] Tests cover it, in the right tier (fast/offline by default, `integration` marked)
-- [ ] A pipeline stage has a **real eval** with a committed, regenerable result
+- [ ] A pipeline stage has a **real eval** with a committed, regenerable result, and a *new* eval has a control arm that separates from it
 - [ ] `ruff format`, `ruff check`, `mypy` are clean
 - [ ] The README reflects it, and it's out of Roadmap
 - [ ] The plan, architecture, this document and CLAUDE.md reflect it, and no prose still asserts the gap it closed

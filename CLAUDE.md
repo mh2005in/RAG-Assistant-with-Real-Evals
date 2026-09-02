@@ -62,7 +62,9 @@ Four skills drive the loop; four agents do the delegated work inside it.
 
 - **A pipeline stage's quality claims are not "done" until they have a real eval.** No new chunking/embedding/retrieval strategy merges without a measurement of how it performs. This gates claims about *how well* something works — not the stage's functional contracts, which tests prove.
 - Prefer comparative evals: evaluate a new strategy against the existing ones on the same data, and record the numbers.
-- Keep eval datasets, prompts, and results reproducible — check in the eval code and config; treat scores as regenerable artifacts, not screenshots.
+- **A new eval carries a control arm** — an arrangement that must score badly (shuffled text, a random vector, a distractor context). A metric that cannot fail is not measuring anything, and a run where the control scores like a real arm is a broken metric, not a good result. The extraction, embedding, storage and generation evals have one; the chunking and retrieval evals predate the rule and compare real candidates only, so their metrics rest on argument rather than on a demonstrated floor.
+- Keep eval datasets, prompts, and results reproducible — check in the eval code and config; treat scores as regenerable artifacts, not screenshots. Every stage has an eval today (see the [`eval-runner`](.claude/agents/eval-runner.md) table); a new extractor, strategy or model joins its stage's eval as another arm in the same change.
+- Evals run offline against the checked-in fixtures, but most of them embed text and so need a running Ollama — only [`extraction_fidelity_eval.py`](backend/evals/extraction_fidelity_eval.py) and the fixed-size sweep need nothing. [`storage_index_eval.py`](backend/evals/storage_index_eval.py) additionally needs a live Postgres, because it measures the HNSW index and a stand-in for a database cannot be approximate the way the real one is.
 - When you claim something "works" or "improved," cite the eval output — don't assert quality from reading code.
 
 ## Code style & structure

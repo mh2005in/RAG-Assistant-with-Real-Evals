@@ -16,11 +16,12 @@ single requirement is taken from open to merged.
 Three constraints set the order, and they matter more than any individual feature:
 
 1. **Measurement before breadth.** The project's premise is that every stage is
-   measured. Chunking and generation now have real evals; extraction, embedding,
-   storage and retrieval still do not (`REQ-EVL-02` is `Partial`).
-   Adding more ingestion formats or strategies before the measurement layer exists
-   means adding things we can't tell are working — which is the exact failure mode
-   this project was built to avoid. Phase 4 comes first for that reason.
+   measured, and as of Phase 4 every stage is (`REQ-EVL-02` is `Done`). Adding more
+   ingestion formats or strategies before that layer existed would have meant adding
+   things we could not tell were working — the exact failure mode this project was
+   built to avoid — which is why Phase 4 came first. The rule stands for what
+   follows: a new extractor, strategy or model joins the eval that already covers
+   its stage in the same change.
 2. **Gates before contributors.** Backend tests, lint and types used to run only
    as local hooks — fine for one machine, not fine for anything else — so
    `REQ-QUA-06` was folded into Phase 4 as small, cheap insurance and taken
@@ -102,22 +103,24 @@ the backend gates run somewhere other than one laptop.
 | 4.2 | `REQ-EVL-04` | ✅ **Shipped.** Rank-aware metrics (recall@k, MRR, nDCG) reported by `/evaluate` alongside the existing ones, with a comparative eval over both sample documents at k=3 and k=5. Ranking behaviour untouched — `answer_similarity` still picks the winner. |
 | 4.3 | `REQ-EVL-06` | ✅ **Shipped.** Answer-faithfulness eval for generation: claims vs context sentences, embedding-based, three conditions (grounded / distractor / closed-book). The first eval covering the generation stage; also closed `REQ-GEN-01`'s grounding gap. |
 | 4.4 | `REQ-EVL-05` | RAGAS LLM-judge eval. **Blocked on a decision** (local judge vs external judge API) — see the README proposal. Resolve the decision before any code. |
-| 4.5 | `REQ-EVL-02` | Extraction, embedding and storage evals to finish the stage coverage — retrieval is now covered by 4.2 and generation by 4.3. Flips this requirement from `Partial` to `Done`. |
+| 4.5 | `REQ-EVL-02` | ✅ **Shipped.** Extraction, embedding and storage evals, finishing the stage coverage — retrieval was covered by 4.2 and generation by 4.3. Each carries a control arm, and each turned up something: `sort=True` extraction scrambles a two-column page (0.55 order fidelity against 1.00 for the shipped default); no embedder tested tells a claim from its reversal (0/16 hard triplets), and the model's own task prefixes push 85% of arbitrary sentence pairs above the 0.6 relevance threshold; and Postgres does not choose the HNSW index on any of the three `search_chunks` call shapes, so search is exact today and the index earns nothing on a read (forced, it still costs no recall at this corpus size). Flipped this requirement from `Partial` to `Done`. |
 
-**Dependencies:** 4.2 and 4.3 are independent of each other. 4.4 is gated on a
-human decision, not on code. 4.5 should land last so it can reuse the harness
-4.2/4.3 establish, and both have now set it down. From 4.2: an eval can drive the
-real `Evaluation` service against an in-memory stand-in for pgvector, so it needs
-no database. From 4.3: seeded generation and control arms — a metric is only
-trusted once a control shows it separates.
+**Dependencies:** 4.2 and 4.3 were independent of each other. 4.4 is gated on a
+human decision, not on code. 4.5 landed last and reused what 4.2 and 4.3 had set
+down — from 4.2, that an eval can drive a shipped service against a stand-in for
+its storage; from 4.3, seeded runs and control arms, since a metric is only trusted
+once a control shows it separates. 4.5 broke the DB-free pattern in exactly one
+place: the storage eval needs a live pgvector, because an approximate index is the
+one thing that cannot be measured through a stand-in for it.
 
 **Exit criteria:**
-- A CI run on a backend PR shows tests, lint and types green.
-- Every pipeline stage has at least one reproducible eval with a committed result
-  artifact.
-- `REQ-EVL-02` is `Done`; `REQ-EVL-04` ✅ and `REQ-EVL-06` ✅ are both `Done`.
-- The RAGAS decision is recorded — either implemented or explicitly deferred with
-  the reasoning written down.
+- ✅ A CI run on a backend PR shows tests, lint and types green.
+- ✅ Every pipeline stage has at least one reproducible eval with a committed
+  result artifact.
+- ✅ `REQ-EVL-02`, `REQ-EVL-04` and `REQ-EVL-06` are all `Done`.
+- ⬜ The RAGAS decision is recorded — either implemented or explicitly deferred
+  with the reasoning written down. **This is all that keeps Phase 4 open**, and it
+  is a human decision, not code.
 
 ## Phase 5 — Ingestion breadth
 

@@ -185,7 +185,9 @@ erDiagram
   so **the column is coupled to the model** — a different-dimension model needs a
   schema change today (`REQ-EMB-02`).
 - HNSW index with `vector_cosine_ops` — cosine is the metric retrieval ranks by,
-  and the index has to match.
+  and the index has to match. **Measured caveat:** at the corpus sizes tested the
+  planner does not actually use it (see D15), so search is exact rather than
+  approximate today.
 
 **Access control is a column, enforced in the application layer.** Every read
 filters on `access_role`. It's deliberately the simplest thing that works; when
@@ -205,7 +207,7 @@ returns. Two dependencies are injected per request:
   thread-safe.
 - `get_llm()` — the Ollama client built from environment.
 
-Both exist so tests can override them with fakes, which is why 164 of the 170
+Both exist so tests can override them with fakes, which is why 191 of the 197
 tests run with no database and no network.
 
 One nuance in `/process`: three of its fields arrive as JSON strings inside a
@@ -246,6 +248,10 @@ Short entries, kept because the reasoning matters more than the choice.
 | D9 | Rank-aware metrics are reported, not used to select the winner | Adding them alongside `answer_similarity` measures the ranking without silently changing which strategy `/evaluate` keeps; the two changes stay separable and reviewable | The eval shows the kept strategy is sometimes *not* the best-ranked one, so the selection rule is now a known open question rather than an answered one |
 | D10 | Measure answer faithfulness with embedding similarity, not an LLM judge | Same reasoning as D3, applied to generation: deterministic, free, offline, and unblocked by the judge-model decision `REQ-EVL-05` is still waiting on | Similarity is not entailment — a claim that contradicts the context while resembling it scores as supported, and an honest "I don't know" scores as unfaithful |
 | D11 | Score claims against context **sentences**, not whole chunks | A chunk embedding is dominated by its overall topic, so chunk-level matching passed invented on-topic claims; the first version of the metric could not separate grounded from ungrounded answers at all | One embedding per context sentence instead of per chunk, and a sentence→chunk map to keep citations scorable |
+| D12 | The storage eval runs against a live pgvector, breaking the DB-free pattern every other eval follows | An approximate index is the one thing a stand-in cannot imitate: an in-memory ranker is exact by construction, so it would report the index as perfect no matter how it behaved | One eval needs the compose stack up, and it loads (then deletes) thousands of rows to reach a size where the index is worth having |
+| D13 | Embed bare text, not `nomic-embed-text`'s documented `search_query:` / `search_document:` prefixes | Measured, not assumed: the prefixes lift paraphrase similarity (0.604 → 0.658) but lift arbitrary-pair similarity far more — 85% of corpus sentence pairs would clear `ANSWER_MATCH_THRESHOLD` against 21% today, and easy-negative accuracy falls | Probably leaving retrieval quality on the table. Adopting them is a recalibration of both thresholds plus a re-run of the retrieval and faithfulness evals, not a switch |
+| D14 | Treat cosine similarity as a topic signal, not a meaning signal | The embedding eval's triplets are unambiguous: neither the shipped embedder nor a TF-IDF baseline ever ranks a paraphrase above a same-vocabulary contradiction (0 of 16), while both separate topics comfortably | Every threshold in the system inherits this. It is why D11 scores against sentences rather than chunks, and why an entailment-aware judge (`REQ-EVL-05`) is the only real fix |
+| D15 | Keep the HNSW index even though nothing currently uses it | The storage eval reads `EXPLAIN` for all three `search_chunks` call shapes and the planner picks none of them: it gathers the role's chunks by foreign key and sorts them exactly, because a plan's cost ignores detoasting the 3 kB vector. Forced to use the index, recall stays 1.000 at every `ef_search` — so nothing is lost by leaving it in place, and it is already there for the corpus size that will need it | Index maintenance on every insert (folded into the ~56 rows/s the eval measures) buying nothing on any read today; whether the FK-and-sort plan still wins at 10× the rows is unmeasured |
 
 ## 8. Extension points
 
@@ -255,12 +261,16 @@ Where new work attaches, and what it must not disturb:
   set, add it to the comparison eval. `/process` picks it up; `/evaluate` starts
   scoring it. Nothing else changes. (`REQ-CHK-06`, `REQ-CHK-07`)
 - **A new extraction source** — OCR, another file type, or a scraped URL plugs in
-  ahead of chunking and must produce the same per-page structure.
-  (`REQ-EXT-03`–`05`)
+  ahead of chunking and must produce the same per-page structure, and joins
+  `evals/extraction_fidelity_eval.py` as another arm so its fidelity is measured
+  against today's extractor rather than asserted. (`REQ-EXT-03`–`05`)
 - **A different embedding model** — swap by environment if it is 768-dim;
-  otherwise the schema needs the change described in `REQ-EMB-02`. Note the
-  faithfulness support threshold is calibrated per embedding model: re-run the
-  eval and read its `threshold_sweep` before trusting the old cut.
+  otherwise the schema needs the change described in `REQ-EMB-02`. **Both**
+  thresholds are calibrated per embedding model, so re-run
+  `evals/embedding_quality_eval.py` (which reports where arbitrary corpus pairs sit
+  relative to `ANSWER_MATCH_THRESHOLD`) and the faithfulness eval's
+  `threshold_sweep` before trusting either old cut. Add the model as an arm rather
+  than replacing the incumbent, so the two are comparable.
 - **A different generation model or prompt** — the faithfulness eval generates
   through the shipped `Answering.build_prompt`, so re-running it measures the
   change directly. The client is seeded, but generation is not bit-reproducible:
