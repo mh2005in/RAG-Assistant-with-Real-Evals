@@ -9,6 +9,24 @@
 #
 # Credentials default to local-dev values (rag/rag); override them via the shell
 # or a .env file. These are NOT production secrets -- never point this at real data.
+
+# Pinned so every checkout is the *same* Compose project. Without it Compose
+# derives the project name from the directory, so a stack brought up inside a
+# worktree (.claude/worktrees/<name>/) becomes a separate project that still wants
+# the same container names and ports: it collides with the root checkout's
+# containers instead of adopting them, gets its own empty volumes and re-pulls
+# every Ollama model, and leaves unusable orphans behind when the post-merge hook
+# removes the worktree -- their bind mounts point at a directory that no longer
+# exists, so they cannot even start. One name means `up` adopts whatever is
+# already running and `down` cleans it up, from any checkout. The trade-off is
+# that two checkouts cannot run the stack at once, which was never possible
+# anyway: they share the published ports.
+#
+# $COMPOSE_PROJECT_NAME (and `docker compose -p`) still override this, which is
+# how the orphans got made in the first place -- leave both unset unless you
+# specifically want a second, isolated stack, and expect to clean it up yourself.
+name: rag-assistant-with-real-evals
+
 services:
   app:
     # The FastAPI app (see backend/Dockerfile). DATABASE_URL and OLLAMA_* are
