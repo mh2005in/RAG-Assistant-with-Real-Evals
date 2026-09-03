@@ -168,4 +168,49 @@ test.describe('Admin tab (mocked backend)', () => {
     const loser = evalTable.locator('tbody tr').filter({ hasText: 'fixed' });
     await expect(loser).toContainText('—');
   });
+  test('a non-PDF document is uploaded and its type reported', async ({ page }) => {
+    await page.route('**/process', async (route: Route) => {
+      await route.fulfill({
+        json: {
+          processed: true,
+          doc_type: 'docx',
+          document_id: 12,
+          strategies: [{ strategy: 'fixed', chunk_count: 6 }],
+        },
+      });
+    });
+
+    await page.goto('/admin');
+    await page.getByLabel('Document name').fill('Handbook');
+    await page.setInputFiles('input[type=file]', {
+      name: 'handbook.docx',
+      mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      buffer: Buffer.from('PK mock docx'),
+    });
+    await page.getByRole('button', { name: /Upload & process/ }).click();
+
+    // The type the backend detected is surfaced, not assumed to be a PDF.
+    await expect(page.getByText(/Stored as document #12/)).toBeVisible();
+    await expect(page.getByText(/\(docx\)/)).toBeVisible();
+  });
+
+  test('a file whose type cannot be identified is reported as not stored', async ({ page }) => {
+    await page.route('**/process', async (route: Route) => {
+      await route.fulfill({
+        json: { processed: true, doc_type: 'unknown', document_id: null, strategies: [] },
+      });
+    });
+
+    await page.goto('/admin');
+    await page.getByLabel('Document name').fill('Mystery');
+    await page.setInputFiles('input[type=file]', {
+      name: 'mystery.bin',
+      mimeType: 'application/octet-stream',
+      buffer: Buffer.from([0, 1, 2]),
+    });
+    await page.getByRole('button', { name: /Upload & process/ }).click();
+
+    await expect(page.getByText(/Nothing was stored \(doc type: unknown\)/)).toBeVisible();
+  });
+
 });

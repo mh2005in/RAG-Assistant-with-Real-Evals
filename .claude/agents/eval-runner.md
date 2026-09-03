@@ -24,9 +24,10 @@ committed as regenerable JSON in
 [`backend/evals/results/`](../../backend/evals/results/). Run everything from
 `backend/`.
 
-One per pipeline stage. Four of them carry a **control arm** — an arrangement that
-must score badly (`shuffled`, `random`, `closed_book`/`distractor`) — so a run
-where the control scores like a real arm is a broken metric, not a good result.
+One per pipeline stage, and two for extraction. Five of them carry a **control
+arm** — an arrangement that must score badly (`shuffled`, `random`,
+`closed_book`/`distractor`, `html_undressed`) — so a run where the control scores
+like a real arm is a broken metric, not a good result.
 Say so if you see it. The chunking and retrieval evals have no control arm: they
 compare real candidates only, so a flat or surprising table there is a finding to
 report, not a broken metric.
@@ -34,6 +35,7 @@ report, not a broken metric.
 | Stage | Eval | Command | Needs |
 | --- | --- | --- | --- |
 | Extraction | PDF round-trip fidelity | `uv run python -m evals.extraction_fidelity_eval` | Nothing (control: `shuffled`) |
+| Extraction | Source formats against the PDF baseline | `uv run python -m evals.extraction_formats_eval` | Nothing (controls: `html_undressed`, `text_shuffled`) |
 | Chunking | Fixed-size baseline sweep | `uv run python -m evals.fixed_size_chunking_eval` | Nothing |
 | Chunking | Strategy comparison (fixed vs semantic vs structural) | `uv run python -m evals.chunking_strategies_eval` | **Ollama** — it embeds sentences |
 | Embedding | Triplet accuracy + the similarity floor | `uv run python -m evals.embedding_quality_eval` | **Ollama** (control: `random`) |

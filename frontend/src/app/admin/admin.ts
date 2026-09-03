@@ -14,7 +14,7 @@ import { SessionService } from '../core/session.service';
 /**
  * Admin tab: ingest and evaluate documents.
  *
- *  - Upload   → POST /process. Chunks the PDF with every strategy and stores
+ *  - Upload   → POST /process. Chunks the document with every strategy and stores
  *    them all; reports the stored strategies and the new document id.
  *  - Evaluate → POST /evaluate. Scores the stored strategies against labelled
  *    Q&A pairs, keeps the winner, and reports each strategy's score. The upload
@@ -110,7 +110,7 @@ export class Admin {
     const accessRole = this.session.accessRole.trim();
     const name = this.docName.trim();
     if (!this.file) {
-      this.uploadError = 'Choose a PDF file to upload.';
+      this.uploadError = 'Choose a file to upload.';
       return;
     }
     if (!name) {

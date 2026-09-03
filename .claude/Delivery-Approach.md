@@ -70,7 +70,9 @@ Ten steps, in order:
    and retrieval evals predate that rule and have none). Every stage has an eval to join
    (see the [`eval-runner`](agents/eval-runner.md) table); a new extractor,
    strategy or model becomes another arm of its stage's eval rather than a new
-   one. This is the step that most often gets skipped and is the one the project
+   one. Add a *new* eval only when the stage is being asked a different question,
+   and say which question it answers — extraction has two for that reason: one
+   compares ways of reading a single format, the other compares formats. This is the step that most often gets skipped and is the one the project
    exists for.
 7. **Update the README in the same change** — endpoint, architecture, dependency,
    env var, or setup change. Shipped work moves out of Roadmap.

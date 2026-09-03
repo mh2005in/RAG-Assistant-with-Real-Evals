@@ -46,7 +46,7 @@ its neighbours — which is what makes strategies comparable in evals.
 
 | Stage | Interface | Implementations | Location |
 | --- | --- | --- | --- |
-| Extraction | — (a method on the processing service) | PyMuPDF page-by-page text + stats | `services/file_processing.py` |
+| Extraction | `Extractor` | `pdf` (PyMuPDF, real pages), `docx` (python-docx), `html` (BeautifulSoup), `text` — one per ingestible `DocType` | `services/extraction/` |
 | Chunking | `Chunker` | `fixed`, `semantic`, `structural` | `services/chunking/` |
 | Embedding | `Embedder` | Ollama `nomic-embed-text` (768-dim) | `services/embedding/` |
 | Storage | `PostgresStorage` | Postgres + pgvector | `services/storage/` |
@@ -58,6 +58,13 @@ its neighbours — which is what makes strategies comparable in evals.
 per endpoint, not a module per step.** Everything `/process` does — detect,
 extract, exclude pages, chunk every way, embed, store — is a method on
 `FileProcessing`, most of them private. The class's public surface is `process()`.
+
+Extraction is the one step that reaches outside that class, for the same reason
+chunking does: it is a *set of swappable strategies*, one per format, and an eval
+has to be able to run them against each other. Deciding **which** type a file is
+stays on `FileProcessing` (`_detect_doc_type`); **reading** that type lives behind
+`Extractor` in `services/extraction/`. A format is added there and nothing
+downstream changes.
 A stage only becomes its own module when it has several interchangeable
 implementations to hold (chunking, embedding, generation), because that is what an
 interface is *for*.
@@ -88,9 +95,9 @@ sequenceDiagram
     participant F as FileProcessing
     participant O as Ollama
     participant P as Postgres
-    C->>A: PDF + name + access_role (+ chunk_size, exclude_pages, structural)
+    C->>A: document + name + access_role (+ chunk_size, exclude_pages, structural)
     A->>F: process(...)
-    F->>F: detect type, extract pages, apply page exclusions
+    F->>F: detect type, extract pages (per-format Extractor), apply page exclusions
     loop every strategy
       F->>F: chunk
       F->>O: embed chunks
@@ -207,7 +214,7 @@ returns. Two dependencies are injected per request:
   thread-safe.
 - `get_llm()` — the Ollama client built from environment.
 
-Both exist so tests can override them with fakes, which is why 191 of the 197
+Both exist so tests can override them with fakes, which is why 230 of the 236
 tests run with no database and no network.
 
 One nuance in `/process`: three of its fields arrive as JSON strings inside a
@@ -223,7 +230,8 @@ An Angular 20 SPA of standalone components, two routes:
   session service holding the access role that every request carries.
 - `user/` — the **Ask** tab: question in, answer with cited sources or the raw
   ranked chunks out.
-- `admin/` — the **Admin** tab: upload and process a PDF, then evaluate the stored
+- `admin/` — the **Admin** tab: upload and process a document (PDF, DOCX, HTML or
+  plain text), then evaluate the stored
   strategies against Q&A pairs. The upload pre-fills the document id for the
   evaluate form, because that is the actual workflow.
 
@@ -261,10 +269,13 @@ Where new work attaches, and what it must not disturb:
 - **A new chunking strategy** — implement `Chunker`, register it in the strategy
   set, add it to the comparison eval. `/process` picks it up; `/evaluate` starts
   scoring it. Nothing else changes. (`REQ-CHK-06`, `REQ-CHK-07`)
-- **A new extraction source** — OCR, another file type, or a scraped URL plugs in
-  ahead of chunking and must produce the same per-page structure, and joins
-  `evals/extraction_fidelity_eval.py` as another arm so its fidelity is measured
-  against today's extractor rather than asserted. (`REQ-EXT-03`–`05`)
+- **A new extraction source** — OCR, another file type, or a scraped URL
+  implements `Extractor` in `services/extraction/`, is registered against a
+  `DocType`, and must produce the same per-page structure (a source with no page
+  boundaries of its own returns exactly one page). It joins
+  `evals/extraction_formats_eval.py` as another arm so its fidelity is measured
+  against the PDF baseline rather than asserted. Nothing downstream changes.
+  (`REQ-EXT-03`, `REQ-EXT-05`)
 - **A different embedding model** — swap by environment if it is 768-dim;
   otherwise the schema needs the change described in `REQ-EMB-02`. **Both**
   thresholds are calibrated per embedding model, so re-run

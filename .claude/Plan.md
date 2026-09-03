@@ -128,16 +128,21 @@ one thing that cannot be measured through a stand-in for it.
 
 | # | Requirement | Notes |
 | --- | --- | --- |
-| 5.1 | `REQ-EXT-04` | Non-PDF types (DOCX, HTML, plain text). Establishes the extractor seam that OCR and scraping then reuse. |
+| 5.1 | `REQ-EXT-04` | ✅ **Shipped.** Non-PDF types (DOCX, HTML, plain text), each an `Extractor` behind one interface in `services/extraction/` — the seam OCR and scraping now plug into. A format eval scores all four containers on the same source: none loses a word (recall/precision/order 1.000), and it turned up that a PDF round trip destroys paragraph breaks, so on flat prose the non-PDF formats structurally chunk *better* than the baseline. |
 | 5.2 | `REQ-EXT-03` | OCR for scanned PDFs (Tesseract), with an eval comparing OCR'd against native extraction. |
 | 5.3 | `REQ-EXT-05` | Web scraping ingestion. **Watch the data rule:** scraped content is never committed. |
 
-**Dependencies:** all three need Phase 4's extraction eval to exist first —
-otherwise there is no way to show a new source produces usable text. Order within
-the phase is 5.1 → 5.2/5.3.
+**Dependencies:** all three needed Phase 4's extraction eval to exist first —
+otherwise there is no way to show a new source produces usable text. 5.1 has
+landed and set two more things down for 5.2/5.3: the `Extractor` interface a new
+source implements, and `extraction_formats_eval.py`, whose arms are formats — so
+OCR and a scraped page each join it as another arm rather than needing an eval of
+their own.
 
-**Exit criteria:** each new source has an extraction eval showing chunk quality
-comparable to the PDF path, and the README lists the supported types.
+**Exit criteria:**
+- ⬜ Each new source has an extraction eval scoring the text and chunk shape it
+  yields against the PDF baseline. ✅ for 5.1; 5.2 and 5.3 outstanding.
+- ⬜ The README lists the supported types. ✅ as far as 5.1 goes.
 
 ## Phase 6 — Access and governance
 

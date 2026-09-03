@@ -1,0 +1,445 @@
+{
+  "baseline": "pdf",
+  "chunk_size": 128,
+  "seed": 20260903,
+  "datasets": [
+    {
+      "dataset": "sample.txt",
+      "document_words": 273,
+      "blocks": 4,
+      "pdf_pages": 3,
+      "pdf_font_size": 10.0,
+      "arms": [
+        {
+          "arm": "pdf",
+          "role": "candidate",
+          "bytes": 2973,
+          "pages_extracted": 3,
+          "paginated": true,
+          "words_extracted": 273,
+          "recall": 1.0,
+          "precision": 1.0,
+          "order_fidelity": 1.0,
+          "chunks": {
+            "fixed": {
+              "chunk_size": 128,
+              "num_chunks": 3,
+              "total_words": 273,
+              "min_chunk_words": 17,
+              "max_chunk_words": 128,
+              "mean_chunk_words": 91.0,
+              "stdev_chunk_words": 64.09,
+              "fill_ratio": 0.7109,
+              "undersized_chunks": 1
+            },
+            "structural": {
+              "chunk_size": null,
+              "num_chunks": 1,
+              "total_words": 273,
+              "min_chunk_words": 273,
+              "max_chunk_words": 273,
+              "mean_chunk_words": 273.0,
+              "stdev_chunk_words": 0.0,
+              "fill_ratio": null,
+              "undersized_chunks": null
+            }
+          }
+        },
+        {
+          "arm": "docx",
+          "role": "candidate",
+          "bytes": 37458,
+          "pages_extracted": 1,
+          "paginated": false,
+          "words_extracted": 273,
+          "recall": 1.0,
+          "precision": 1.0,
+          "order_fidelity": 1.0,
+          "chunks": {
+            "fixed": {
+              "chunk_size": 128,
+              "num_chunks": 3,
+              "total_words": 273,
+              "min_chunk_words": 17,
+              "max_chunk_words": 128,
+              "mean_chunk_words": 91.0,
+              "stdev_chunk_words": 64.09,
+              "fill_ratio": 0.7109,
+              "undersized_chunks": 1
+            },
+            "structural": {
+              "chunk_size": null,
+              "num_chunks": 4,
+              "total_words": 273,
+              "min_chunk_words": 52,
+              "max_chunk_words": 91,
+              "mean_chunk_words": 68.25,
+              "stdev_chunk_words": 16.38,
+              "fill_ratio": null,
+              "undersized_chunks": null
+            }
+          }
+        },
+        {
+          "arm": "html",
+          "role": "candidate",
+          "bytes": 2112,
+          "pages_extracted": 1,
+          "paginated": false,
+          "words_extracted": 273,
+          "recall": 1.0,
+          "precision": 1.0,
+          "order_fidelity": 1.0,
+          "chunks": {
+            "fixed": {
+              "chunk_size": 128,
+              "num_chunks": 3,
+              "total_words": 273,
+              "min_chunk_words": 17,
+              "max_chunk_words": 128,
+              "mean_chunk_words": 91.0,
+              "stdev_chunk_words": 64.09,
+              "fill_ratio": 0.7109,
+              "undersized_chunks": 1
+            },
+            "structural": {
+              "chunk_size": null,
+              "num_chunks": 4,
+              "total_words": 273,
+              "min_chunk_words": 52,
+              "max_chunk_words": 91,
+              "mean_chunk_words": 68.25,
+              "stdev_chunk_words": 16.38,
+              "fill_ratio": null,
+              "undersized_chunks": null
+            }
+          }
+        },
+        {
+          "arm": "text",
+          "role": "candidate",
+          "bytes": 1722,
+          "pages_extracted": 1,
+          "paginated": false,
+          "words_extracted": 273,
+          "recall": 1.0,
+          "precision": 1.0,
+          "order_fidelity": 1.0,
+          "chunks": {
+            "fixed": {
+              "chunk_size": 128,
+              "num_chunks": 3,
+              "total_words": 273,
+              "min_chunk_words": 17,
+              "max_chunk_words": 128,
+              "mean_chunk_words": 91.0,
+              "stdev_chunk_words": 64.09,
+              "fill_ratio": 0.7109,
+              "undersized_chunks": 1
+            },
+            "structural": {
+              "chunk_size": null,
+              "num_chunks": 4,
+              "total_words": 273,
+              "min_chunk_words": 52,
+              "max_chunk_words": 91,
+              "mean_chunk_words": 68.25,
+              "stdev_chunk_words": 16.38,
+              "fill_ratio": null,
+              "undersized_chunks": null
+            }
+          }
+        },
+        {
+          "arm": "html_undressed",
+          "role": "control",
+          "bytes": 1722,
+          "pages_extracted": 1,
+          "paginated": false,
+          "words_extracted": 314,
+          "recall": 0.9707,
+          "precision": 0.8439,
+          "order_fidelity": 0.9029,
+          "chunks": {
+            "fixed": {
+              "chunk_size": 128,
+              "num_chunks": 3,
+              "total_words": 314,
+              "min_chunk_words": 58,
+              "max_chunk_words": 128,
+              "mean_chunk_words": 104.67,
+              "stdev_chunk_words": 40.41,
+              "fill_ratio": 0.8177,
+              "undersized_chunks": 1
+            },
+            "structural": {
+              "chunk_size": null,
+              "num_chunks": 1,
+              "total_words": 314,
+              "min_chunk_words": 314,
+              "max_chunk_words": 314,
+              "mean_chunk_words": 314.0,
+              "stdev_chunk_words": 0.0,
+              "fill_ratio": null,
+              "undersized_chunks": null
+            }
+          }
+        },
+        {
+          "arm": "text_shuffled",
+          "role": "control",
+          "bytes": 1722,
+          "pages_extracted": 1,
+          "paginated": false,
+          "words_extracted": 273,
+          "recall": 1.0,
+          "precision": 1.0,
+          "order_fidelity": 0.0586,
+          "chunks": {
+            "fixed": {
+              "chunk_size": 128,
+              "num_chunks": 3,
+              "total_words": 273,
+              "min_chunk_words": 17,
+              "max_chunk_words": 128,
+              "mean_chunk_words": 91.0,
+              "stdev_chunk_words": 64.09,
+              "fill_ratio": 0.7109,
+              "undersized_chunks": 1
+            },
+            "structural": {
+              "chunk_size": null,
+              "num_chunks": 1,
+              "total_words": 273,
+              "min_chunk_words": 273,
+              "max_chunk_words": 273,
+              "mean_chunk_words": 273.0,
+              "stdev_chunk_words": 0.0,
+              "fill_ratio": null,
+              "undersized_chunks": null
+            }
+          }
+        }
+      ]
+    },
+    {
+      "dataset": "structured_sample.txt",
+      "document_words": 556,
+      "blocks": 22,
+      "pdf_pages": 3,
+      "pdf_font_size": 10.0,
+      "arms": [
+        {
+          "arm": "pdf",
+          "role": "candidate",
+          "bytes": 4222,
+          "pages_extracted": 3,
+          "paginated": true,
+          "words_extracted": 556,
+          "recall": 1.0,
+          "precision": 1.0,
+          "order_fidelity": 1.0,
+          "chunks": {
+            "fixed": {
+              "chunk_size": 128,
+              "num_chunks": 5,
+              "total_words": 556,
+              "min_chunk_words": 44,
+              "max_chunk_words": 128,
+              "mean_chunk_words": 111.2,
+              "stdev_chunk_words": 37.57,
+              "fill_ratio": 0.8688,
+              "undersized_chunks": 1
+            },
+            "structural": {
+              "chunk_size": null,
+              "num_chunks": 11,
+              "total_words": 556,
+              "min_chunk_words": 37,
+              "max_chunk_words": 68,
+              "mean_chunk_words": 50.55,
+              "stdev_chunk_words": 10.89,
+              "fill_ratio": null,
+              "undersized_chunks": null
+            }
+          }
+        },
+        {
+          "arm": "docx",
+          "role": "candidate",
+          "bytes": 38166,
+          "pages_extracted": 1,
+          "paginated": false,
+          "words_extracted": 556,
+          "recall": 1.0,
+          "precision": 1.0,
+          "order_fidelity": 1.0,
+          "chunks": {
+            "fixed": {
+              "chunk_size": 128,
+              "num_chunks": 5,
+              "total_words": 556,
+              "min_chunk_words": 44,
+              "max_chunk_words": 128,
+              "mean_chunk_words": 111.2,
+              "stdev_chunk_words": 37.57,
+              "fill_ratio": 0.8688,
+              "undersized_chunks": 1
+            },
+            "structural": {
+              "chunk_size": null,
+              "num_chunks": 11,
+              "total_words": 556,
+              "min_chunk_words": 37,
+              "max_chunk_words": 68,
+              "mean_chunk_words": 50.55,
+              "stdev_chunk_words": 10.89,
+              "fill_ratio": null,
+              "undersized_chunks": null
+            }
+          }
+        },
+        {
+          "arm": "html",
+          "role": "candidate",
+          "bytes": 3839,
+          "pages_extracted": 1,
+          "paginated": false,
+          "words_extracted": 556,
+          "recall": 1.0,
+          "precision": 1.0,
+          "order_fidelity": 1.0,
+          "chunks": {
+            "fixed": {
+              "chunk_size": 128,
+              "num_chunks": 5,
+              "total_words": 556,
+              "min_chunk_words": 44,
+              "max_chunk_words": 128,
+              "mean_chunk_words": 111.2,
+              "stdev_chunk_words": 37.57,
+              "fill_ratio": 0.8688,
+              "undersized_chunks": 1
+            },
+            "structural": {
+              "chunk_size": null,
+              "num_chunks": 11,
+              "total_words": 556,
+              "min_chunk_words": 37,
+              "max_chunk_words": 68,
+              "mean_chunk_words": 50.55,
+              "stdev_chunk_words": 10.89,
+              "fill_ratio": null,
+              "undersized_chunks": null
+            }
+          }
+        },
+        {
+          "arm": "text",
+          "role": "candidate",
+          "bytes": 3269,
+          "pages_extracted": 1,
+          "paginated": false,
+          "words_extracted": 556,
+          "recall": 1.0,
+          "precision": 1.0,
+          "order_fidelity": 1.0,
+          "chunks": {
+            "fixed": {
+              "chunk_size": 128,
+              "num_chunks": 5,
+              "total_words": 556,
+              "min_chunk_words": 44,
+              "max_chunk_words": 128,
+              "mean_chunk_words": 111.2,
+              "stdev_chunk_words": 37.57,
+              "fill_ratio": 0.8688,
+              "undersized_chunks": 1
+            },
+            "structural": {
+              "chunk_size": null,
+              "num_chunks": 11,
+              "total_words": 556,
+              "min_chunk_words": 37,
+              "max_chunk_words": 68,
+              "mean_chunk_words": 50.55,
+              "stdev_chunk_words": 10.89,
+              "fill_ratio": null,
+              "undersized_chunks": null
+            }
+          }
+        },
+        {
+          "arm": "html_undressed",
+          "role": "control",
+          "bytes": 3269,
+          "pages_extracted": 1,
+          "paginated": false,
+          "words_extracted": 597,
+          "recall": 0.9227,
+          "precision": 0.8593,
+          "order_fidelity": 0.8881,
+          "chunks": {
+            "fixed": {
+              "chunk_size": 128,
+              "num_chunks": 5,
+              "total_words": 597,
+              "min_chunk_words": 85,
+              "max_chunk_words": 128,
+              "mean_chunk_words": 119.4,
+              "stdev_chunk_words": 19.23,
+              "fill_ratio": 0.9328,
+              "undersized_chunks": 1
+            },
+            "structural": {
+              "chunk_size": null,
+              "num_chunks": 2,
+              "total_words": 597,
+              "min_chunk_words": 230,
+              "max_chunk_words": 367,
+              "mean_chunk_words": 298.5,
+              "stdev_chunk_words": 96.87,
+              "fill_ratio": null,
+              "undersized_chunks": null
+            }
+          }
+        },
+        {
+          "arm": "text_shuffled",
+          "role": "control",
+          "bytes": 3269,
+          "pages_extracted": 1,
+          "paginated": false,
+          "words_extracted": 556,
+          "recall": 1.0,
+          "precision": 1.0,
+          "order_fidelity": 0.054,
+          "chunks": {
+            "fixed": {
+              "chunk_size": 128,
+              "num_chunks": 5,
+              "total_words": 556,
+              "min_chunk_words": 44,
+              "max_chunk_words": 128,
+              "mean_chunk_words": 111.2,
+              "stdev_chunk_words": 37.57,
+              "fill_ratio": 0.8688,
+              "undersized_chunks": 1
+            },
+            "structural": {
+              "chunk_size": null,
+              "num_chunks": 2,
+              "total_words": 556,
+              "min_chunk_words": 206,
+              "max_chunk_words": 350,
+              "mean_chunk_words": 278.0,
+              "stdev_chunk_words": 101.82,
+              "fill_ratio": null,
+              "undersized_chunks": null
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

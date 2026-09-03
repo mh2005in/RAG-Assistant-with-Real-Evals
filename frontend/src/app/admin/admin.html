@@ -18,7 +18,8 @@
   <div class="card-head">
     <h2>1 · Upload &amp; process</h2>
     <p class="muted">
-      Upload a PDF. The backend chunks it with <em>every</em> strategy, embeds and stores them all
+      Upload a PDF, Word document, HTML page or text file. The backend chunks it with
+      <em>every</em> strategy, embeds and stores them all
       under the <strong>{{ session.accessRole || '—' }}</strong>
       access role. Nothing is scored yet — that's step 2.
     </p>
@@ -33,8 +34,12 @@
   <form (ngSubmit)="upload()">
     <fieldset class="form-fieldset" [disabled]="!hasRole">
       <label class="field">
-        <span>PDF file</span>
-        <input type="file" accept="application/pdf,.pdf" (change)="onFileSelected($event)" />
+        <span>Document file</span>
+        <input
+          type="file"
+          accept="application/pdf,.pdf,.docx,.html,.htm,.txt,.md"
+          (change)="onFileSelected($event)"
+        />
       </label>
 
       <label class="field">
@@ -148,7 +153,8 @@
         </table>
       } @else {
         <p class="error">
-          Nothing was stored (doc type: {{ processResult.doc_type }}). Only PDFs are processed.
+          Nothing was stored (doc type: {{ processResult.doc_type }}). The file's type could not
+          be identified — PDF, DOCX, HTML and plain text are processed.
         </p>
       }
     </div>

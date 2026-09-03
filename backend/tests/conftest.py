@@ -1,16 +1,18 @@
 """Shared pytest fixtures.
 
-Provides a small in-memory PDF builder so tests can exercise real PDF
-extraction without any files on disk or network access, and a fake Ollama client
-so the embedding path runs offline (see CLAUDE.md).
+Provides in-memory PDF and DOCX builders so tests can exercise real extraction
+without any files on disk or network access, and a fake Ollama client so the
+embedding path runs offline (see CLAUDE.md).
 """
 
 from collections.abc import Callable
+from io import BytesIO
 from types import SimpleNamespace
 from typing import Any
 
 import pymupdf
 import pytest
+from docx import Document
 
 
 class FakeOllamaEmbedClient:
@@ -51,5 +53,24 @@ def make_pdf() -> Callable[[list[str]], bytes]:
             return doc.tobytes()
         finally:
             doc.close()
+
+    return _build
+
+
+@pytest.fixture
+def make_docx() -> Callable[[list[str]], bytes]:
+    """Return a factory that builds a DOCX (as bytes) from its paragraphs.
+
+    Real package bytes rather than a stub, so the extractor is exercised against
+    a file python-docx would actually be handed.
+    """
+
+    def _build(paragraphs: list[str]) -> bytes:
+        document = Document()
+        for text in paragraphs:
+            document.add_paragraph(text)
+        buffer = BytesIO()
+        document.save(buffer)
+        return buffer.getvalue()
 
     return _build

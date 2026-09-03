@@ -6,9 +6,22 @@ from pydantic import BaseModel, Field
 
 
 class DocType(str, Enum):
-    """Detected document type of an uploaded file."""
+    """Detected document type of an uploaded file.
+
+    Every member except ``unknown`` is ingestible: it has an extractor behind the
+    :class:`~services.extraction.Extractor` seam, so ``/process`` chunks, embeds
+    and stores it. ``unknown`` is the type nothing can read, and is stored as
+    nothing.
+
+    Only ``pdf`` carries real page boundaries. ``docx``, ``html`` and ``text``
+    leave pagination to whatever renders them, so they extract to a single page
+    and their per-page stats describe the whole document.
+    """
 
     pdf = "pdf"
+    docx = "docx"
+    html = "html"
+    text = "text"
     unknown = "unknown"
 
 

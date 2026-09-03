@@ -5,6 +5,12 @@ text, chunk it with *every* implemented strategy, and embed and persist each chu
 the moment it is produced (so a document's chunks never all sit in memory at once).
 Route handlers stay thin and delegate here (see CLAUDE.md).
 
+Detecting the type is this service's job; reading it is not. Each format has an
+extractor behind the :class:`~services.extraction.Extractor` interface (PDF, DOCX,
+HTML, plain text), so a new source is added there rather than here. Only a PDF has
+real pages — the rest extract to a single page, which is what their per-page stats
+then describe.
+
 Scoring is a *separate* stage: this service stores every strategy without judging
 it, and ``/evaluate`` (see :class:`~services.evaluation.Evaluation`) compares them
 after the fact and keeps the best. So chunking never pays the cost of scoring.
@@ -14,7 +20,8 @@ rather than becoming methods here, so they can be run and compared
 apples-to-apples.
 """
 
-import pymupdf
+import zipfile
+from io import BytesIO
 
 from dtos.requests import (
     ChunkingStrategy,
@@ -30,12 +37,45 @@ from services.chunking import (
     StructuralChunker,
 )
 from services.embedding import Embedder, OllamaEmbedder
+from services.extraction import extractor_for
 from services.storage import PostgresStorage
 
 _PDF_MAGIC = b"%PDF-"
+# A DOCX is a ZIP; the entry below is what distinguishes it from every other
+# Office package (.xlsx, .pptx) that shares the container.
+_ZIP_MAGIC = b"PK\x03\x04"
+_DOCX_ENTRY = "word/document.xml"
+# Markup that means "this is a document, not prose that mentions tags".
+_HTML_MARKERS = (b"<!doctype html", b"<html", b"<head", b"<body")
+
 # The %PDF- marker should sit at the very start, but some producers emit a few
-# leading bytes; the spec tolerates it within the first chunk of the file.
+# leading bytes; the spec tolerates it within the first chunk of the file. The
+# HTML markers are looked for in the same window, for the same reason.
 _MAGIC_SEARCH_WINDOW = 1024
+
+# Declared content types that identify a format, checked only when the bytes are
+# inconclusive. Matched as substrings, so charset parameters do not matter.
+_CONTENT_TYPE_HINTS = (
+    ("pdf", DocType.pdf),
+    ("wordprocessingml", DocType.docx),
+    ("msword", DocType.docx),
+    ("html", DocType.html),
+    ("text/", DocType.text),
+)
+
+# Filename extensions, the last resort. Markdown counts as text: the pipeline
+# reads it as prose, and its markers are the ones the structural chunker looks for.
+_EXTENSION_HINTS = (
+    (".pdf", DocType.pdf),
+    (".docx", DocType.docx),
+    (".html", DocType.html),
+    (".htm", DocType.html),
+    (".xhtml", DocType.html),
+    (".txt", DocType.text),
+    (".text", DocType.text),
+    (".md", DocType.text),
+    (".markdown", DocType.text),
+)
 
 # Words per chunk for the fixed-size candidate when the caller does not tune it.
 _DEFAULT_CHUNK_SIZE = 200
@@ -66,29 +106,68 @@ class FileProcessing:
     ) -> DocType:
         """Identify the document type of ``content``.
 
-        Content sniffing (the leading ``%PDF-`` marker) takes precedence. The
-        ``filename`` extension and declared ``content_type`` are used only when
-        the bytes are inconclusive, so a mislabelled file is still classified by
-        its actual contents.
+        Content sniffing takes precedence — the ``%PDF-`` marker, the
+        ``word/document.xml`` entry inside a ZIP, or HTML's own tags. The
+        declared ``content_type`` is consulted next and the ``filename``
+        extension last, so a mislabelled file is still classified by its actual
+        contents and only a format with no signature of its own (plain text)
+        depends on what the caller claims.
+
+        :attr:`DocType.unknown` is returned when nothing identifies the file,
+        rather than defaulting to text: bytes that decode are not thereby prose,
+        and ingesting a stray binary as a document would put its noise into the
+        embeddings.
         """
         if _PDF_MAGIC in content[:_MAGIC_SEARCH_WINDOW]:
             return DocType.pdf
-        if content_type and "pdf" in content_type.lower():
-            return DocType.pdf
-        if filename and filename.lower().endswith(".pdf"):
-            return DocType.pdf
+        if self._is_docx(content):
+            return DocType.docx
+        head = content[:_MAGIC_SEARCH_WINDOW].lower()
+        if any(marker in head for marker in _HTML_MARKERS):
+            return DocType.html
+        if content_type:
+            declared = content_type.lower()
+            for hint, doc_type in _CONTENT_TYPE_HINTS:
+                if hint in declared:
+                    return doc_type
+        if filename:
+            name = filename.lower()
+            for suffix, doc_type in _EXTENSION_HINTS:
+                if name.endswith(suffix):
+                    return doc_type
         return DocType.unknown
 
-    def _extract_pdf_pages(self, content: bytes) -> list[str]:
-        """Extract text from a PDF, one entry per page (page 1 at index 0).
+    @staticmethod
+    def _is_docx(content: bytes) -> bool:
+        """Is ``content`` an Office package holding a Word document?
 
-        Raises :class:`ValueError` if ``content`` is not a readable PDF.
+        Guarded by the ZIP magic so the archive is only opened for bytes that
+        could be one, and keyed on the Word body part so a ``.xlsx`` or ``.pptx``
+        — same container, different contents — is not mistaken for a document.
         """
+        if not content.startswith(_ZIP_MAGIC):
+            return False
         try:
-            with pymupdf.open(stream=content, filetype="pdf") as doc:
-                return [page.get_text() for page in doc]
-        except Exception as exc:  # PyMuPDF surfaces several error types
-            raise ValueError("content is not a readable PDF") from exc
+            with zipfile.ZipFile(BytesIO(content)) as package:
+                return _DOCX_ENTRY in package.namelist()
+        except zipfile.BadZipFile:
+            return False
+
+    @staticmethod
+    def _extract_pages(content: bytes, doc_type: DocType) -> list[str]:
+        """Extract ``content`` into per-page text, page 1 at index 0.
+
+        Delegates to the extractor registered for ``doc_type`` (see
+        :mod:`services.extraction`). Only ``pdf`` yields more than one page;
+        the paginationless formats yield exactly one.
+
+        Raises :class:`ValueError` if ``doc_type`` has no extractor, or if the
+        bytes are not readable as that type.
+        """
+        extractor = extractor_for(doc_type)
+        if extractor is None:
+            raise ValueError(f"no extractor for document type '{doc_type.value}'")
+        return extractor.extract(content)
 
     @staticmethod
     def _exclude_pages(pages: list[str], exclusion: PageExclusion | None) -> list[str]:
@@ -144,6 +223,10 @@ class FileProcessing:
         :class:`~services.evaluation.Evaluation`), so the same document can be
         scored later without re-chunking.
 
+        Any type with an extractor is ingested — PDF, DOCX, HTML and plain text.
+        A file whose type cannot be identified is reported as
+        :attr:`DocType.unknown` and stored as nothing.
+
         ``fixed_size`` tunes the fixed-size candidate (defaulting to
         ``_DEFAULT_CHUNK_SIZE`` words) and ``structural`` the structural one (its
         heading patterns and size bounds); both fall back to their defaults.
@@ -153,10 +236,12 @@ class FileProcessing:
         doc_type = self._detect_doc_type(
             content, filename=filename, content_type=content_type
         )
-        if doc_type is not DocType.pdf:
+        if extractor_for(doc_type) is None:
             return ProcessResponse(processed=len(content) > 0, doc_type=doc_type)
 
-        pages = self._exclude_pages(self._extract_pdf_pages(content), page_exclusion)
+        pages = self._exclude_pages(
+            self._extract_pages(content, doc_type), page_exclusion
+        )
         fixed_size = fixed_size or FixedSizeChunkingRequest(
             chunk_size=_DEFAULT_CHUNK_SIZE
         )
