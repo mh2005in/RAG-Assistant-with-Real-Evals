@@ -12,7 +12,7 @@ same generated PDF is extracted several ways and scored identically:
 ====================  ==========================================  ================
 arm                   what it extracts with                       expectation
 ====================  ==========================================  ================
-``shipped``           ``FileProcessing._extract_pdf_pages`` —     highest
+``shipped``           ``FileProcessing._extract_pages`` —         highest
                       PyMuPDF's default ``get_text()``
 ``blocks``            ``get_text("blocks")``, block order kept    close to shipped
 ``words``             ``get_text("words")``, word order kept      close to shipped
@@ -62,6 +62,7 @@ from typing import Any
 import pymupdf
 
 from dtos.requests import PageExclusion
+from dtos.responses import DocType
 from evals.fixed_size_chunking_eval import _load_pages
 from services.file_processing import FileProcessing
 
@@ -202,7 +203,7 @@ def _extract(content: bytes, arm: str, rng: random.Random) -> list[str]:
     if arm in ("shipped", "shuffled"):
         # The shipped extractor, reached one level in: process() returns chunk
         # counts, and this eval needs the page text it extracted on the way.
-        pages = FileProcessing()._extract_pdf_pages(content)
+        pages = FileProcessing._extract_pages(content, DocType.pdf)
         if arm == "shipped":
             return pages
         shuffled = []
@@ -293,7 +294,7 @@ def _exclusion_round_trip(truth_pages: list[str], content: bytes) -> dict[str, A
     surviving pages' words still present, and ``leaked_words`` counts words unique
     to the excluded page that survived anyway — it must be 0.
     """
-    extracted = FileProcessing()._extract_pdf_pages(content)
+    extracted = FileProcessing._extract_pages(content, DocType.pdf)
     kept = FileProcessing._exclude_pages(
         extracted, PageExclusion(exclude_pages=[_EXCLUDED_PAGE])
     )

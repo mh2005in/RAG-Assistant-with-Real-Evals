@@ -253,17 +253,23 @@ def test_invalid_page_exclusion_is_rejected(
     assert response.status_code == 422
 
 
-def test_non_pdf_is_detected_but_not_chunked_or_stored(
+def test_an_unidentifiable_type_is_reported_but_not_chunked_or_stored(
     fake_storage: MagicMock,
 ) -> None:
     response = client.post(
         "/process",
         data={
-            "name": "notes.txt",
+            "name": "mystery.bin",
             "access_role": "analyst",
             "chunk_size": "8",
         },
-        files={"file": ("notes.txt", b"just some plain text", "text/plain")},
+        files={
+            "file": (
+                "mystery.bin",
+                bytes([0, 1, 2]) + b" opaque bytes",
+                "application/octet-stream",
+            )
+        },
     )
 
     assert response.status_code == 200
@@ -273,6 +279,44 @@ def test_non_pdf_is_detected_but_not_chunked_or_stored(
     assert body["document_id"] is None
     fake_storage.create_document.assert_not_called()
     fake_storage.insert_chunk.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    ("doc_type", "filename", "content", "content_type"),
+    [
+        ("text", "notes.txt", b"just some plain text to chunk", "text/plain"),
+        (
+            "html",
+            "page.html",
+            b"<html><body><p>just some plain text to chunk</p></body></html>",
+            "text/html",
+        ),
+    ],
+)
+def test_a_non_pdf_document_is_reported_and_stored(
+    fake_storage: MagicMock,
+    doc_type: str,
+    filename: str,
+    content: bytes,
+    content_type: str,
+) -> None:
+    """``/process`` accepts the type and reports it in ``doc_type`` (REQ-EXT-04)."""
+    response = client.post(
+        "/process",
+        data={"name": filename, "access_role": "analyst", "chunk_size": "3"},
+        files={"file": (filename, content, content_type)},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["doc_type"] == doc_type
+    assert body["document_id"] is not None
+    assert {stored["strategy"] for stored in body["strategies"]} == {
+        "fixed",
+        "semantic",
+        "structural",
+    }
+    fake_storage.insert_chunk.assert_called()
 
 
 def test_chunk_size_is_optional(

@@ -1,6 +1,8 @@
 """Tests for the FileProcessing service."""
 
+import zipfile
 from collections.abc import Callable
+from io import BytesIO
 from unittest.mock import MagicMock
 
 import pytest
@@ -61,29 +63,89 @@ class TestDetectDocType:
             DocType.pdf
         )
 
-    def test_unknown_when_no_signal(self) -> None:
+    def test_detects_docx_from_its_package_entry(
+        self, make_docx: Callable[[list[str]], bytes]
+    ) -> None:
+        assert service._detect_doc_type(make_docx(["Some prose."])) is DocType.docx
+
+    def test_a_zip_without_a_word_body_is_not_docx(self) -> None:
+        # .xlsx and .pptx share the container; only the body part tells them apart.
+        buffer = BytesIO()
+        with zipfile.ZipFile(buffer, "w") as package:
+            package.writestr("xl/workbook.xml", "<workbook/>")
+
+        assert service._detect_doc_type(buffer.getvalue()) is DocType.unknown
+
+    def test_detects_html_from_its_markup(self) -> None:
         assert (
-            service._detect_doc_type(b"hello world", filename="notes.txt")
-            is DocType.unknown
+            service._detect_doc_type(b"<!DOCTYPE html><html><body>hi</body></html>")
+            is DocType.html
         )
+
+    def test_plain_text_is_identified_by_extension(self) -> None:
+        # Plain text has no signature of its own, so it is the one format that
+        # depends on what the caller declares.
+        assert service._detect_doc_type(b"hello world", filename="notes.txt") is (
+            DocType.text
+        )
+
+    def test_plain_text_is_identified_by_content_type(self) -> None:
+        assert (
+            service._detect_doc_type(b"hello world", content_type="text/plain")
+            is DocType.text
+        )
+
+    def test_unknown_when_no_signal(self) -> None:
+        # Bytes that decode are not thereby prose: without a declared type or a
+        # known extension there is nothing to say this is a document.
+        assert service._detect_doc_type(b"hello world") is DocType.unknown
 
     def test_empty_content_is_unknown(self) -> None:
         assert service._detect_doc_type(b"") is DocType.unknown
 
 
-class TestExtractPdfPages:
-    def test_extracts_one_entry_per_page(
+class TestExtractPages:
+    """The seam onto :mod:`services.extraction`; the extractors are tested there."""
+
+    def test_extracts_one_entry_per_page_for_a_pdf(
         self, make_pdf: Callable[[list[str]], bytes]
     ) -> None:
-        pages = service._extract_pdf_pages(make_pdf(["Hello page one", "Second page"]))
+        pages = service._extract_pages(
+            make_pdf(["Hello page one", "Second page"]), DocType.pdf
+        )
 
         assert len(pages) == 2
         assert "Hello page one" in pages[0]
         assert "Second page" in pages[1]
 
-    def test_rejects_non_pdf_bytes(self) -> None:
+    @pytest.mark.parametrize(
+        ("doc_type", "content"),
+        [
+            (DocType.html, b"<html><body><p>One</p><p>Two</p></body></html>"),
+            (DocType.text, b"One\n\nTwo"),
+        ],
+    )
+    def test_paginationless_formats_extract_to_exactly_one_page(
+        self, doc_type: DocType, content: bytes
+    ) -> None:
+        # Their pagination is a render-time choice, so there is no page break to
+        # report; per-page stats become whole-document stats.
+        assert service._extract_pages(content, doc_type) == ["One\n\nTwo"]
+
+    def test_docx_extracts_to_exactly_one_page(
+        self, make_docx: Callable[[list[str]], bytes]
+    ) -> None:
+        assert service._extract_pages(make_docx(["One", "Two"]), DocType.docx) == [
+            "One\n\nTwo"
+        ]
+
+    def test_rejects_bytes_that_are_not_the_detected_type(self) -> None:
         with pytest.raises(ValueError, match="not a readable PDF"):
-            service._extract_pdf_pages(b"this is plainly not a pdf")
+            service._extract_pages(b"this is plainly not a pdf", DocType.pdf)
+
+    def test_rejects_a_type_nothing_can_read(self) -> None:
+        with pytest.raises(ValueError, match="no extractor"):
+            service._extract_pages(b"anything", DocType.unknown)
 
 
 class TestExcludePages:
@@ -239,14 +301,14 @@ class TestProcess:
             "Clause 2 Limits.",
         ]
 
-    def test_non_pdf_is_not_chunked_or_persisted(self) -> None:
+    def test_an_unidentifiable_type_is_not_chunked_or_persisted(self) -> None:
         storage = MagicMock()
 
         response = service.process(
-            b"just some plain text",
-            "notes.txt",
+            bytes([0, 1, 2]) + b" opaque bytes",
+            "mystery.bin",
             "analyst",
-            filename="notes.txt",
+            filename="mystery.bin",
             storage=storage,
         )
 
@@ -256,6 +318,70 @@ class TestProcess:
         storage.create_document.assert_not_called()
         storage.insert_chunk.assert_not_called()
         storage.delete_chunks_except.assert_not_called()
+
+    @pytest.mark.parametrize(
+        ("doc_type", "content", "filename"),
+        [
+            (
+                DocType.html,
+                b"<html><body><p>Alpha beta gamma.</p></body></html>",
+                "a.html",
+            ),
+            (DocType.text, b"Alpha beta gamma.", "a.txt"),
+        ],
+    )
+    def test_a_non_pdf_document_is_chunked_and_persisted(
+        self, doc_type: DocType, content: bytes, filename: str
+    ) -> None:
+        storage = _fake_storage()
+
+        response = service.process(
+            content, filename, "analyst", filename=filename, storage=storage
+        )
+
+        assert response.doc_type is doc_type
+        assert response.document_id == 55
+        # Every strategy runs on a non-PDF exactly as it does on a PDF -- the
+        # format is the extractor's business and nothing downstream's.
+        assert {stored.strategy for stored in response.strategies} == {
+            "fixed",
+            "semantic",
+            "structural",
+        }
+        assert all(stored.chunk_count > 0 for stored in response.strategies)
+
+    def test_a_docx_is_chunked_and_persisted(
+        self, make_docx: Callable[[list[str]], bytes]
+    ) -> None:
+        storage = _fake_storage()
+
+        response = service.process(
+            make_docx(["Alpha beta gamma.", "Delta epsilon zeta."]),
+            "handbook.docx",
+            "analyst",
+            filename="handbook.docx",
+            storage=storage,
+        )
+
+        assert response.doc_type is DocType.docx
+        assert all(stored.chunk_count > 0 for stored in response.strategies)
+
+    def test_paginationless_chunks_are_all_attributed_to_page_one(self) -> None:
+        storage = _fake_storage()
+
+        service.process(
+            b"Alpha beta gamma. " * 200,
+            "notes.txt",
+            "analyst",
+            filename="notes.txt",
+            storage=storage,
+        )
+
+        # The document has one page, so every chunk cites page 1 rather than a
+        # page number the source never had.
+        chunks = _stored_chunks(storage)
+        assert len(chunks) > 1
+        assert {chunk.page_number for chunk in chunks} == {1}
 
     def test_excluded_pages_are_left_out_of_chunks(
         self, make_pdf: Callable[[list[str]], bytes]

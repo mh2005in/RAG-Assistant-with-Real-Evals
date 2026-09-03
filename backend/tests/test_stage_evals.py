@@ -11,6 +11,8 @@ by the extraction eval's own generator, which is the point — a metric that rea
 a real PDF round trip is worth proving against one.
 """
 
+import random
+
 import numpy as np
 import pytest
 
@@ -28,6 +30,14 @@ from evals.extraction_fidelity_eval import (
     _exclusion_round_trip,
     _fidelity,
     _paginate,
+)
+from evals.extraction_fidelity_eval import _score_arm as _score_pdf_arm
+from evals.extraction_formats_eval import (
+    _HTML_SCRIPT,
+    _HTML_STYLE,
+    _blocks,
+    _build_html,
+    _extract,
     _score_arm,
 )
 from evals.storage_index_eval import _grow_corpus, _score
@@ -103,14 +113,14 @@ def test_words_on_the_wrong_page_cost_page_recall_but_not_document_recall() -> N
     # Every word survives, but page 2's words were extracted onto page 1.
     merged = ["alpha beta gamma delta", ""]
 
-    scored = _score_arm(truth, merged)
+    scored = _score_pdf_arm(truth, merged)
 
     assert scored["document_recall"] == 1.0
     assert scored["page_recall"] < 1.0
 
 
 def test_a_missing_page_is_scored_rather_than_ignored() -> None:
-    scored = _score_arm(["alpha beta", "gamma delta"], ["alpha beta"])
+    scored = _score_pdf_arm(["alpha beta", "gamma delta"], ["alpha beta"])
 
     assert scored["page_recall"] == 0.5
     assert scored["document_recall"] == 0.5
@@ -259,3 +269,71 @@ def test_recall_against_exact_search_reads_set_overlap() -> None:
     assert partial["recall_vs_exact"] == pytest.approx(0.5)
     assert missed["recall_vs_exact"] == 0.0
     assert missed["top1_agreement"] == 0.0
+
+
+# --- extraction: source formats --------------------------------------------
+
+
+def test_blocks_recovers_the_paragraphs_in_order_across_pages() -> None:
+    pages = ["first para\n\nsecond para", "third para"]
+
+    # The ground truth every format arm is scored against: the words as they were
+    # before any container touched them, page breaks included or not.
+    assert _blocks(pages) == ["first para", "second para", "third para"]
+
+
+def test_blocks_ignores_blank_paragraphs() -> None:
+    assert _blocks(["one\n\n\n\n   \n\ntwo"]) == ["one", "two"]
+
+
+def test_built_html_carries_non_content_the_extractor_must_drop() -> None:
+    html = _build_html(["Visible prose."]).decode("utf-8")
+
+    # If the chrome were not really in the file, the html arm would have nothing
+    # to strip and its control nothing to fail on.
+    assert _HTML_SCRIPT in html
+    assert _HTML_STYLE in html
+    assert "Visible prose." in html
+
+
+def test_the_html_arm_returns_the_prose_without_the_chrome() -> None:
+    documents = {"html": _build_html(["Visible prose."])}
+
+    pages = _extract("html", documents, random.Random(0))
+
+    assert pages == ["Visible prose."]
+
+
+def test_the_undressed_control_keeps_the_chrome_the_html_arm_drops() -> None:
+    documents = {"html": _build_html(["Visible prose."])}
+
+    undressed = " ".join(_extract("html_undressed", documents, random.Random(0)))
+
+    # The control must fail the way the metric claims: every prose word survives,
+    # and the markup rides along to cost it precision.
+    assert "Visible prose." in undressed
+    assert "analytics" in undressed
+    assert "<title>" in undressed
+
+
+def test_the_shuffled_control_keeps_every_word_and_loses_the_order() -> None:
+    documents = {"text": b"alpha beta gamma delta epsilon zeta"}
+
+    shuffled = _extract("text_shuffled", documents, random.Random(1))[0].split()
+
+    assert sorted(shuffled) == ["alpha", "beta", "delta", "epsilon", "gamma", "zeta"]
+    assert shuffled != ["alpha", "beta", "gamma", "delta", "epsilon", "zeta"]
+
+
+def test_score_arm_flattens_pages_and_records_whether_the_format_paginated() -> None:
+    truth = ["alpha", "beta", "gamma"]
+
+    paginated = _score_arm(truth, ["alpha beta", "gamma"])
+    single = _score_arm(truth, ["alpha beta gamma"])
+
+    # Pagination is reported, not scored: both recovered the same words, and the
+    # one-page format is not penalised for a page structure it never had.
+    assert paginated["paginated"] is True
+    assert single["paginated"] is False
+    assert paginated["recall"] == single["recall"] == 1.0
+    assert paginated["order_fidelity"] == single["order_fidelity"] == 1.0

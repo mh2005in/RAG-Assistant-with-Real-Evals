@@ -20,7 +20,7 @@ keys required.
 flowchart LR
     subgraph ingest["POST /process"]
       direction TB
-      U["PDF upload"] --> EX["Extract text<br/>(PyMuPDF)"]
+      U["Upload<br/>PDF · DOCX · HTML · text"] --> EX["Extract text<br/>(per-format extractor)"]
       EX --> CH["Chunk every strategy<br/>(fixed-size, semantic, structural)"]
       CH --> EM1["Embed<br/>(Ollama)"]
       EM1 --> ST[("PostgreSQL + pgvector<br/>documents, chunks")]
@@ -43,8 +43,11 @@ flowchart LR
     ST -.-> SR
 ```
 
-- **`POST /process`** — detect + extract a PDF (PyMuPDF), chunk it with **every**
-  strategy, and embed and store them all. You don't pick a strategy, and none is
+- **`POST /process`** — detect the document type, extract its text, chunk it with
+  **every** strategy, and embed and store them all. Four types are ingested — PDF
+  (PyMuPDF), DOCX (python-docx), HTML (BeautifulSoup) and plain text — each behind
+  the same `Extractor` interface; anything else comes back as `doc_type:
+  "unknown"` and is stored as nothing. You don't pick a strategy, and none is
   scored or dropped here: the response reports which strategies were stored and
   their chunk counts.
 - **`POST /evaluate`** — score a stored document's strategies against a caller-
@@ -71,7 +74,7 @@ Each stage sits behind a small interface (`Chunker`, `Embedder`, `LLMClient`,
 | Package / env manager | [`uv`](https://docs.astral.sh/uv/) |
 | Web framework | FastAPI + Uvicorn |
 | Validation | Pydantic v2 (all request/response DTOs) |
-| PDF extraction | PyMuPDF |
+| Document extraction | PyMuPDF (PDF), python-docx (DOCX), BeautifulSoup (HTML) |
 | Embeddings & generation | Ollama (`nomic-embed-text` 768-dim, `gemma2:2b`) |
 | Vector store | PostgreSQL 17 + pgvector (HNSW, cosine) |
 | DB driver | psycopg 3 + pgvector adapter |
@@ -135,6 +138,31 @@ curl -X POST http://localhost:8000/process \
 #        {"strategy": "structural", "chunk_count": 15}
 #      ] }
 ```
+
+**Four document types.** PDF, DOCX, HTML and plain text are all accepted on the
+same endpoint, and the detected type comes back in `doc_type`. The type is
+sniffed from the bytes first (the `%PDF-` marker, the `word/document.xml` entry
+inside the Office ZIP, HTML's own tags), so a mislabelled file is still classified
+by what it actually is; the declared content type is consulted next and the
+filename extension last. Plain text is the one format with no signature of its
+own, so it needs one of those two hints:
+
+```bash
+curl -X POST http://localhost:8000/process \
+  -F "file=@handbook.docx;type=application/vnd.openxmlformats-officedocument.wordprocessingml.document" \
+  -F "name=handbook.docx" \
+  -F "access_role=analyst"
+# -> { "processed": true, "doc_type": "docx", "document_id": 2, "strategies": [...] }
+```
+
+A file whose type cannot be identified comes back as `doc_type: "unknown"` with
+`processed: true`, no `document_id` and no strategies — it is reported, not
+ingested, so a stray binary never reaches the embeddings.
+
+**Only PDFs have pages.** DOCX, HTML and plain text leave pagination to whatever
+renders them, so they extract to a single page: their chunks all cite page 1 and
+the per-page stats describe the whole document. `exclude_pages` still applies —
+excluding page 1 of a paginationless document excludes the document.
 
 **No `strategy` field.** Every implemented strategy chunks the document and all of
 their chunks are stored against one `documents` row — none is scored or dropped
@@ -349,6 +377,7 @@ backend/                   the Python/RAG service (run uv commands from here)
     answering.py           /answer: retrieve → augment prompt → generate
     chunking/              Chunker interface + fixed-size, semantic, structural
     embedding/             Embedder interface + Ollama backend
+    extraction/            Extractor interface + pdf, docx, html, text
     generation/            LLMClient interface + Ollama backend + answer-faithfulness metric
     storage/               PostgresStorage (pgvector reads/writes)
   db/schema.sql            documents + chunks tables, FK + HNSW cosine index
@@ -410,7 +439,7 @@ DATABASE_URL=postgresql://rag:rag@localhost:5435/rag uv run pytest -m integratio
 ```
 
 **Evals** are reproducible and checked in as regenerable artifacts, and **every
-pipeline stage has one**. Four of them (extraction, embedding, storage,
+pipeline stage has one**. Five of them (both extraction evals, embedding, storage,
 generation) carry a control arm — an arrangement that must score badly — because a
 metric that cannot fail is not measuring anything; the chunking and retrieval
 evals predate that convention and compare real candidates only. Run from
@@ -418,6 +447,7 @@ evals predate that convention and compare real candidates only. Run from
 
 ```bash
 uv run python -m evals.extraction_fidelity_eval    # does the text survive the PDF?
+uv run python -m evals.extraction_formats_eval     # does it survive DOCX/HTML/text too?
 uv run python -m evals.fixed_size_chunking_eval    # fixed-size baseline sweep
 uv run python -m evals.chunking_strategies_eval    # fixed vs semantic vs structural
 uv run python -m evals.embedding_quality_eval      # does "close" mean "means the same"?
@@ -426,9 +456,9 @@ uv run python -m evals.retrieval_ranking_eval      # rank-aware retrieval metric
 uv run python -m evals.answer_faithfulness_eval    # is a generated answer grounded?
 ```
 
-Most of them embed text, so they need the Ollama service running. Two are
-different: the extraction eval needs neither Ollama nor a database, and the storage
-eval needs **both** Ollama and a live PostgreSQL/pgvector — it is measuring the
+Most of them embed text, so they need the Ollama service running. Three are
+different: the two extraction evals need neither Ollama nor a database, and the
+storage eval needs **both** Ollama and a live PostgreSQL/pgvector — it is measuring the
 index, which no in-memory stand-in can imitate. Give it the database the same way
 the integration tests get it:
 
@@ -476,6 +506,54 @@ words (`kept_recall` 1.000) and no word unique to the excluded page leaks throug
 it over text that has actually been through a PDF — and it caught a real bug while
 being written, when the eval passed the wrong field name to `PageExclusion` and
 excluded nothing at all.
+
+### Extraction formats: does the text survive the container?
+
+`evals/extraction_formats_eval.py` asks the question ingestion breadth raises: a
+new source is only worth having if the text that reaches the chunker is the same
+text. The same paragraphs are written into all four containers at run time — again,
+no source document is committed — and read back through the shipped seam, so the
+only thing that differs between arms is the file format. PDF is the baseline,
+because it is the path the rest of the pipeline was measured on.
+
+| arm | pages | recall | precision | order fidelity |
+| --- | --- | --- | --- | --- |
+| `pdf` (baseline) | 3 | 1.000 | 1.000 | 1.000 |
+| `docx` | 1 | 1.000 | 1.000 | 1.000 |
+| `html` | 1 | 1.000 | 1.000 | 1.000 |
+| `text` | 1 | 1.000 | 1.000 | 1.000 |
+| `html_undressed` *(control)* | 1 | 0.971 | 0.844 | 0.903 |
+| `text_shuffled` *(control)* | 1 | 1.000 | 1.000 | 0.059 |
+
+*(`sample.txt`; `structured_sample.txt` gives the same four perfect candidate rows,
+with the controls at 0.859 precision and 0.054 order fidelity.)*
+
+**No container loses a word.** All four candidates recover every word, in order,
+with nothing spurious added — so DOCX, HTML and plain text reach the chunker with
+exactly what the PDF path delivers.
+
+**The controls show the metrics can fail.** `html_undressed` reads the same HTML
+bytes as plain text with the markup left in: the prose survives (recall holds) and
+the tags, CSS and JavaScript ride along to cost it precision — which is what says
+precision is measuring the markup handling rather than the text. `text_shuffled`
+keeps every word and destroys only the order, and order fidelity collapses to
+0.059 while recall stays at 1.000.
+
+**Pagination is reported, not scored.** Only a PDF stores page boundaries; the
+other three leave pagination to whatever renders them, so they extract to one page
+and their per-page stats describe the whole document. That collapse is the
+graceful degradation `REQ-EXT-04` asks for, so `pages_extracted` records it
+instead of penalising it — scoring per page would punish three formats for a page
+structure their sources never had.
+
+**It turned up something.** On flat prose the *non-PDF* formats chunk better
+structurally than the baseline: DOCX, HTML and text each yield 4 structural chunks
+where the PDF yields 1. A PDF round trip has no blank lines left in it — PyMuPDF
+returns one newline per laid-out line, so the paragraph breaks are gone and the
+structural strategy's paragraph fallback has nothing to split on. Where a document
+marks its own structure (`structured_sample.txt`), the headings survive the round
+trip and all four formats agree at 11 chunks. The fixed-size strategy, which does
+not read structure, is unaffected either way.
 
 ### Chunking strategies: where should the cuts go?
 
@@ -704,7 +782,8 @@ A single-page [Angular 20](https://angular.dev) app (standalone components) in
   (`POST /answer`, a grounded reply plus its cited source chunks) or **Retrieve**
   (`POST /retrieve`, the raw ranked chunks). Optional top-K and chunking-strategy
   filter.
-- **Admin** (`/admin`) — for maintainers. **Upload &amp; process** a PDF
+- **Admin** (`/admin`) — for maintainers. **Upload &amp; process** a document —
+  PDF, DOCX, HTML or plain text —
   (`POST /process`, with optional chunk size, page exclusions, and structural
   section patterns — one regex per line — plus their word bounds) and then
   **Evaluate** the stored strategies (`POST /evaluate`) against a list of
@@ -768,7 +847,7 @@ Planned but **not yet implemented**:
   and user roles, so retrieval and the augmented prompt are scoped precisely to
   each user for more relevant, on-target answers, instead of a single flat
   `access_role`.
-- **Extraction:** OCR (Tesseract) and richer extraction (Docling); non-PDF types.
+- **Extraction:** OCR (Tesseract) and richer extraction (Docling).
 - **Web scraping:** Firecrawl / headless-browser / BeautifulSoup ingestion.
 - **Recalibrating for `nomic-embed-text`'s task prefixes.** The
   [embedding eval](#embedding-quality-does-close-mean-means-the-same) shows the

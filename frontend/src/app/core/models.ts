@@ -16,8 +16,13 @@ export const CHUNKING_STRATEGIES: ChunkingStrategy[] = [
   'llm',
 ];
 
-/** Detected document type of an uploaded file. */
-export type DocType = 'pdf' | 'unknown';
+/**
+ * Detected document type of an uploaded file (backend DocType enum).
+ *
+ * Everything but `unknown` is ingested. Only `pdf` carries real page boundaries;
+ * the rest extract to a single page, so their chunks all cite page 1.
+ */
+export type DocType = 'pdf' | 'docx' | 'html' | 'text' | 'unknown';
 
 // --- /process ---------------------------------------------------------------
 
